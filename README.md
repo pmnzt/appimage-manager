@@ -119,6 +119,21 @@ appimg move --all
 appimg update
 ```
 
+### **5. `appimg reset`**
+Resets All Appimages.
+
+#### Usage
+```bash
+appimg reset
+```
+
+#### Description
+moves all appimages in `~/.appimges` into `~/.appimages/tmp` useful if you decide to rename them again.
+
+```bash
+appimg reset
+```
+
 ---
 
 ## 🧪 Example Workflow

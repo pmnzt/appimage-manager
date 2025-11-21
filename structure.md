@@ -14,3 +14,5 @@ this command will look in ~/.appimages then in each folder that has a .AppImage 
 
 4. appimage setup-all
 this command will run commands 2,3 with their default options.
+
+5. appimage reset this command will move all appimages from their folders in ~/.appimages to ~/.appimages/tmp and then after deletes their folders, then every AppImage file in ~/.appimages/tmp should become non-executable, as well as removing their symlinks 

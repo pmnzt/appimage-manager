@@ -164,6 +164,71 @@ cmd_setup_all() {
 
 
 # ------------------------------------------------------------
+# Command: appimg reset
+# ------------------------------------------------------------
+cmd_reset() {
+    echo "Resetting AppImage structure..."
+
+    mkdir -p "$APPIMG_DIR/tmp"
+
+    # ---------------------------------------------
+    # 1. Move all AppImage files into ~/.appimages/tmp
+    # ---------------------------------------------
+    find "$APPIMG_DIR" -mindepth 2 -type f -iname "*.AppImage" | while read -r f; do
+        file_name=$(basename "$f")
+        echo "Moving $f → $APPIMG_DIR/tmp/$file_name"
+        mv "$f" "$APPIMG_DIR/tmp/$file_name" || {
+            echo "Failed to move $f"
+            continue
+        }
+    done
+
+    # ---------------------------------------------
+    # 2. Delete all folders inside ~/.appimages
+    #    except: tmp/ and placeholder-icon.png
+    # ---------------------------------------------
+    for item in "$APPIMG_DIR"/*; do
+        base="$(basename "$item")"
+
+        # Skip tmp dir
+        [[ "$base" == "tmp" ]] && continue
+
+        # Skip placeholder icon
+        [[ "$base" == "placeholder-icon.png" ]] && continue
+
+        if [[ -d "$item" ]]; then
+            echo "Deleting folder: $item"
+            rm -rf "$item"
+        fi
+    done
+
+    # ---------------------------------------------
+    # 3. Remove executable bit from all AppImages in tmp
+    # ---------------------------------------------
+    echo "Removing executable permissions from AppImages in tmp/"
+    chmod -x "$APPIMG_DIR"/tmp/*.AppImage 2>/dev/null
+
+    # ---------------------------------------------
+    # 4. Remove all .desktop symlinks pointing to ~/.appimages
+    # ---------------------------------------------
+    echo "Removing AppImage desktop entry symlinks..."
+
+    # Find all symlinks inside ~/.local/share/applications that point into ~/.appimages
+    find "$DESKTOP_TARGET" -type l | while read -r link; do
+        target="$(readlink -f "$link")"
+
+        # If symlink target is inside ~/.appimages, delete it
+        if [[ "$target" == "$APPIMG_DIR"* ]]; then
+            echo "Deleting symlink: $link"
+            rm -f "$link"
+        fi
+    done
+
+    echo "Reset complete!"
+}
+
+
+# ------------------------------------------------------------
 # Dispatcher
 # ------------------------------------------------------------
 main() {
@@ -172,6 +237,7 @@ main() {
         move)      shift; cmd_move "$@" ;;
         update)    shift; cmd_update ;;
         setup-all) shift; cmd_setup_all ;;
+        reset) shift; cmd_reset ;;
         *)
             echo "AppImage manager"
             echo "Commands:"
@@ -179,6 +245,7 @@ main() {
             echo "  appimg move [--all] [-s dir] [file.AppImage]"
             echo "  appimg update"
             echo "  appimg setup-all"
+            echo "  appimg reset"
             exit 1
             ;;
     esac
