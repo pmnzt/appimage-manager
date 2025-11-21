@@ -37,7 +37,7 @@ All AppImages managed by this tool are placed in:
 ~/.appimages/
     MyApp/
         MyApp.AppImage
-        icon.png
+        icon.png       <-- optional app icon
         MyApp.desktop
     Editor/
         Editor.AppImage
@@ -50,6 +50,18 @@ All AppImages managed by this tool are placed in:
 ```
 ~/.local/share/applications/
 ```
+
+> **Note:**  
+> If you want a custom icon for your AppImage:
+> 1. Place the icon file (any common format like `.png`, `.svg`, `.ico`) in the **same folder** as the `.AppImage`.  
+> 2. Then run:
+> 
+> ```bash
+> appimg update
+> ```
+> 
+> This will generate or update the `.desktop` file with your icon.  
+> If no icon is found, the placeholder `placeholder-icon.png` will be used instead.
 
 ---
 
@@ -101,6 +113,8 @@ appimg update
 - Uses `icon.*` if available, otherwise uses `placeholder-icon.png`.
 - Creates symlinks in `~/.local/share/applications`.
 
+> **Reminder:** If you added or changed any icons, always run `appimg update` to refresh the `.desktop` entries.
+
 ---
 
 ### **4. `appimg setup-all`**
@@ -119,8 +133,10 @@ appimg move --all
 appimg update
 ```
 
+---
+
 ### **5. `appimg reset`**
-Resets All Appimages.
+Resets all AppImages.
 
 #### Usage
 ```bash
@@ -128,10 +144,16 @@ appimg reset
 ```
 
 #### Description
-moves all appimages in `~/.appimges` into `~/.appimages/tmp` useful if you decide to rename them again.
+- Moves all AppImages in `~/.appimages` into `~/.appimages/tmp/`.
+- Deletes all other folders inside `~/.appimages` (except `tmp` and `placeholder-icon.png`).  
+- Removes all `.desktop` symlinks pointing to AppImages.  
+- Removes executable permissions from AppImages in `tmp/`.  
+
+> **After resetting:**  
+> If you want to re-register your AppImages, run:
 
 ```bash
-appimg reset
+appimg setup-all
 ```
 
 ---
@@ -150,6 +172,10 @@ appimg update
 
 # (Or do all of the above)
 appimg setup-all
+
+# 4. Reset AppImages if needed
+appimg reset
+appimg setup-all   # re-register AppImages
 ```
 
 ---
@@ -171,4 +197,4 @@ Copyright © 2025
 
 ## 🙌 Contributions
 
-Pull requests & suggestions are welcome.
+Pull requests & suggestions are welcome.  
