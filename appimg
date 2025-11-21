@@ -7,6 +7,7 @@
 #   appimg move [--all] [-s dir] [file.AppImage]
 #   appimg update
 #   appimg setup-all
+#   appimg reset
 # ============================================================
 
 APPIMG_DIR="$HOME/.appimages"
@@ -76,6 +77,20 @@ cmd_move() {
         echo "${fname%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}"
     }
 
+    # Function to move icons from tmp associated with a given app
+    move_tmp_icons() {
+        local app_name="$1"
+        local dest="$APPIMG_DIR/$app_name"
+        shopt -s nullglob
+        for icon in "$APPIMG_DIR/tmp/$app_name-icon."*; do
+            [[ -f "$icon" ]] || continue
+            ext="${icon##*.}"
+            echo "Moving icon $(basename "$icon") → $dest/icon.$ext"
+            mv "$icon" "$dest/icon.$ext"
+        done
+        shopt -u nullglob
+    }
+
     # Move ALL AppImages
     if [[ "$do_all" -eq 1 ]]; then
         mapfile -t files < <(find_appimages "$search")
@@ -94,6 +109,11 @@ cmd_move() {
             mkdir -p "$dest"
             echo "Moving $f → $dest/$filename"
             mv "$f" "$dest/$filename" || die "Failed to move $f"
+
+            # Move associated icons from tmp if they exist
+            if [[ "$f" == "$APPIMG_DIR/tmp"* ]]; then
+                move_tmp_icons "$name"
+            fi
         done
         return
     fi
@@ -119,6 +139,11 @@ cmd_move() {
     mkdir -p "$dest"
     echo "Moving $specific_file → $dest/$filename"
     mv "$specific_file" "$dest/$filename" || die "Failed to move file"
+
+    # Move associated icons from tmp if present, rename back to icon.*
+    if [[ "$specific_file" == "$APPIMG_DIR/tmp"* ]]; then
+        move_tmp_icons "$name"
+    fi
 }
 
 # ------------------------------------------------------------
@@ -200,15 +225,22 @@ cmd_reset() {
     mkdir -p "$APPIMG_DIR/tmp"
 
     # ---------------------------------------------
-    # 2. Move all AppImage files into ~/.appimages/tmp
+    # 2. Move all AppImage files and their icons into tmp/
     # ---------------------------------------------
     find "$APPIMG_DIR" -mindepth 2 -type f -iname "*.AppImage" | while IFS= read -r f; do
         file_name=$(basename "$f")
+        app_dir=$(dirname "$f")
         echo "Moving $f → $APPIMG_DIR/tmp/$file_name"
-        mv "$f" "$APPIMG_DIR/tmp/$file_name" || {
-            echo "Failed to move $f"
-            continue
-        }
+        mv "$f" "$APPIMG_DIR/tmp/$file_name" || continue
+
+        # Check for any icon in the same folder
+        icon=$(find "$app_dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
+        if [[ -n "$icon" && -f "$icon" ]]; then
+            icon_ext="${icon##*.}"
+            icon_name="${file_name%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}-icon.$icon_ext"
+            echo "Moving icon $icon → $APPIMG_DIR/tmp/$icon_name"
+            mv "$icon" "$APPIMG_DIR/tmp/$icon_name" || echo "Failed to move icon $icon"
+        fi
     done
 
     # ---------------------------------------------
@@ -235,7 +267,7 @@ cmd_reset() {
     done
     shopt -u nullglob
 
-    echo "Reset complete!"
+    echo "Reset complete! Run 'appimg setup-all' to rebuild."
 }
 
 

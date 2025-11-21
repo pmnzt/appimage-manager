@@ -17,4 +17,4 @@ make sure the appimge file is executable.
 4. appimage setup-all
 this command will run commands 2,3 with their default options.
 
-5. appimage reset this command will move all appimages from their folders in ~/.appimages to ~/.appimages/tmp and then after deletes their folders, then every AppImage file in ~/.appimages/tmp should become non-executable, as well as removing their symlinks 
+5. appimage reset this command will move all appimages from their folders in ~/.appimages to ~/.appimages/tmp and then after deletes their folders, then every AppImage file in ~/.appimages/tmp should become non-executable, as well as removing their symlinks, make sure the reset command whem moving appimages into ~/.appimages/tmp to move their icons too if they had, using the name of the appimage like name-icon.* so that when appimage update runs it can also detect icons in .appimages/tmp and move them and edit their names to icon.* but also move them to their correct places as they were before reset.
