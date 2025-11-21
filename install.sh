@@ -28,3 +28,20 @@ else
     echo "Installation failed: $INSTALL_PATH is not executable."
     exit 1
 fi
+
+# ------------------------------------------------------------
+# Ensure ~/.appimages exists
+# ------------------------------------------------------------
+APPIMG_DIR="$HOME/.appimages"
+mkdir -p "$APPIMG_DIR"
+echo "Ensured directory exists: $APPIMG_DIR"
+
+# Move placeholder-icon.png into ~/.appimages
+if [ -f "placeholder-icon.png" ]; then
+    echo "Moving placeholder-icon.png → $APPIMG_DIR/"
+    cp "placeholder-icon.png" "$APPIMG_DIR/"
+else
+    echo "Warning: placeholder-icon.png not found in current directory."
+fi
+
+echo "Installation and setup complete!"
