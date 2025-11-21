@@ -68,11 +68,19 @@ cmd_move() {
 
     mkdir -p "$APPIMG_DIR"
 
+    # Move ALL AppImages
     if [[ "$do_all" -eq 1 ]]; then
         mapfile -t files < <(find_appimages "$search")
         [[ ${#files[@]} -eq 0 ]] && die "No AppImages found."
 
         for f in "${files[@]}"; do
+
+            # Skip files already inside ~/.appimages
+            if [[ "$f" == "$APPIMG_DIR"* ]]; then
+                echo "Skipping (already in appimages): $f"
+                continue
+            fi
+
             name=$(appname_from_path "$f")
             dest="$APPIMG_DIR/$name"
             mkdir -p "$dest"
@@ -87,6 +95,12 @@ cmd_move() {
         die "You must provide a file unless using --all"
     fi
 
+    # Skip if file is already managed
+    if [[ "$specific_file" == "$APPIMG_DIR"* ]]; then
+        echo "Skipping (already in appimages): $specific_file"
+        exit 0
+    fi
+
     if [[ ! -f "$specific_file" ]]; then
         die "File not found: $specific_file"
     fi
@@ -97,7 +111,6 @@ cmd_move() {
     echo "Moving $specific_file → $dest/"
     mv "$specific_file" "$dest/" || die "Failed to move file"
 }
-
 
 # ------------------------------------------------------------
 # Command: appimg update
