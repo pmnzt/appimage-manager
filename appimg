@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+
+# ============================================================
+# appimg - AppImage manager tool
+# Commands:
+#   appimg ls
+#   appimg move [--all] [-s dir] [file.AppImage]
+#   appimg update
+#   appimg setup-all
+# ============================================================
+
+APPIMG_DIR="$HOME/.appimages"
+DESKTOP_TARGET="$HOME/.local/share/applications"
+
+# Ensure ~/.local/share/applications exists
+mkdir -p "$DESKTOP_TARGET"
+
+
+# ------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------
+die() {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+find_appimages() {
+    local search_dir="$1"
+    find "$search_dir" -type f -iname "*.AppImage" 2>/dev/null
+}
+
+appname_from_path() {
+    basename "$1" | sed 's/.AppImage$//'
+}
+
+
+# ------------------------------------------------------------
+# Command: appimg ls
+# ------------------------------------------------------------
+cmd_ls() {
+    local search="$HOME"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -s) search="$2"; shift 2 ;;
+            *) die "Unknown option for ls: $1" ;;
+        esac
+    done
+
+    find_appimages "$search"
+}
+
+
+# ------------------------------------------------------------
+# Command: appimg move
+# ------------------------------------------------------------
+cmd_move() {
+    local search="$HOME"
+    local do_all=0
+    local specific_file=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -s) search="$2"; shift 2 ;;
+            --all) do_all=1; shift ;;
+            *) specific_file="$1"; shift ;;
+        esac
+    done
+
+    mkdir -p "$APPIMG_DIR"
+
+    if [[ "$do_all" -eq 1 ]]; then
+        mapfile -t files < <(find_appimages "$search")
+        [[ ${#files[@]} -eq 0 ]] && die "No AppImages found."
+
+        for f in "${files[@]}"; do
+            name=$(appname_from_path "$f")
+            dest="$APPIMG_DIR/$name"
+            mkdir -p "$dest"
+            echo "Moving $f → $dest/"
+            mv "$f" "$dest/" || die "Failed to move $f"
+        done
+        return
+    fi
+
+    # Single file mode
+    if [[ -z "$specific_file" ]]; then
+        die "You must provide a file unless using --all"
+    fi
+
+    if [[ ! -f "$specific_file" ]]; then
+        die "File not found: $specific_file"
+    fi
+
+    name=$(appname_from_path "$specific_file")
+    dest="$APPIMG_DIR/$name"
+    mkdir -p "$dest"
+    echo "Moving $specific_file → $dest/"
+    mv "$specific_file" "$dest/" || die "Failed to move file"
+}
+
+
+# ------------------------------------------------------------
+# Command: appimg update
+# ------------------------------------------------------------
+cmd_update() {
+    [[ ! -d "$APPIMG_DIR" ]] && die "$APPIMG_DIR does not exist."
+
+    for dir in "$APPIMG_DIR"/*; do
+        [[ ! -d "$dir" ]] && continue
+
+        appimage=$(find "$dir" -maxdepth 1 -type f -iname "*.AppImage" | head -n 1)
+        [[ -z "$appimage" ]] && continue
+
+        name=$(basename "$appimage" .AppImage)
+        desktop_file="$dir/$name.desktop"
+
+        # Icon detection
+        icon=$(find "$dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
+        if [[ -z "$icon" ]]; then
+            icon="$APPIMG_DIR/placeholder-icon.png"
+        fi
+
+        echo "Generating $desktop_file"
+
+        cat > "$desktop_file" <<EOF
+[Desktop Entry]
+Type=Application
+Name=$name
+Exec="$appimage"
+Icon=$icon
+Terminal=false
+Categories=Utility;
+EOF
+
+        chmod +x "$desktop_file"
+
+        # Symlink into applications directory
+        ln -sf "$desktop_file" "$DESKTOP_TARGET/$name.desktop"
+        echo "Linked → $DESKTOP_TARGET/$name.desktop"
+    done
+}
+
+
+# ------------------------------------------------------------
+# Command: appimg setup-all
+# ------------------------------------------------------------
+cmd_setup_all() {
+    cmd_move --all
+    cmd_update
+}
+
+
+# ------------------------------------------------------------
+# Dispatcher
+# ------------------------------------------------------------
+main() {
+    case "$1" in
+        ls)        shift; cmd_ls "$@" ;;
+        move)      shift; cmd_move "$@" ;;
+        update)    shift; cmd_update ;;
+        setup-all) shift; cmd_setup_all ;;
+        *)
+            echo "AppImage manager"
+            echo "Commands:"
+            echo "  appimg ls [-s dir]"
+            echo "  appimg move [--all] [-s dir] [file.AppImage]"
+            echo "  appimg update"
+            echo "  appimg setup-all"
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
