@@ -134,6 +134,9 @@ cmd_update() {
         appimage=$(find "$dir" -maxdepth 1 -type f -iname "*.AppImage" | head -n 1)
         [[ -z "$appimage" ]] && continue
 
+        # Make sure the AppImage is executable
+        chmod +x "$appimage"
+
         # Get base name (strip extension, case-insensitive)
         filename=$(basename "$appimage")
         name="${filename%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}"
