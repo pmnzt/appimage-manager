@@ -68,30 +68,32 @@ cmd_move() {
 
     mkdir -p "$APPIMG_DIR"
 
+    # Function to get base name (without .AppImage or .appimage)
+    get_base_name() {
+        local file="$1"
+        local fname
+        fname=$(basename "$file")
+        echo "${fname%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}"
+    }
+
     # Move ALL AppImages
     if [[ "$do_all" -eq 1 ]]; then
         mapfile -t files < <(find_appimages "$search")
         [[ ${#files[@]} -eq 0 ]] && die "No AppImages found."
 
         for f in "${files[@]}"; do
-
             # Skip all files inside ~/.appimages except tmp/
-            if [[ "$f" == "$APPIMG_DIR"* ]]; then
-                # Allow files inside tmp
-                if [[ "$f" == "$APPIMG_DIR/tmp"* ]]; then
-                    # Do not skip
-                    :
-                else
-                    echo "Skipping (already managed): $f"
-                    continue
-                fi
+            if [[ "$f" == "$APPIMG_DIR"* && "$f" != "$APPIMG_DIR/tmp"* ]]; then
+                echo "Skipping (already managed): $f"
+                continue
             fi
-            
-            name=$(appname_from_path "$f")
+
+            filename=$(basename "$f")
+            name=$(get_base_name "$f")
             dest="$APPIMG_DIR/$name"
             mkdir -p "$dest"
-            echo "Moving $f → $dest/"
-            mv "$f" "$dest/" || die "Failed to move $f"
+            echo "Moving $f → $dest/$filename"
+            mv "$f" "$dest/$filename" || die "Failed to move $f"
         done
         return
     fi
@@ -101,8 +103,8 @@ cmd_move() {
         die "You must provide a file unless using --all"
     fi
 
-    # Skip if file is already managed
-    if [[ "$specific_file" == "$APPIMG_DIR"* ]]; then
+    # Skip if file is already managed, except tmp
+    if [[ "$specific_file" == "$APPIMG_DIR"* && "$specific_file" != "$APPIMG_DIR/tmp"* ]]; then
         echo "Skipping (already in appimages): $specific_file"
         exit 0
     fi
@@ -111,11 +113,12 @@ cmd_move() {
         die "File not found: $specific_file"
     fi
 
-    name=$(appname_from_path "$specific_file")
+    filename=$(basename "$specific_file")
+    name=$(get_base_name "$specific_file")
     dest="$APPIMG_DIR/$name"
     mkdir -p "$dest"
-    echo "Moving $specific_file → $dest/"
-    mv "$specific_file" "$dest/" || die "Failed to move file"
+    echo "Moving $specific_file → $dest/$filename"
+    mv "$specific_file" "$dest/$filename" || die "Failed to move file"
 }
 
 # ------------------------------------------------------------
@@ -127,13 +130,17 @@ cmd_update() {
     for dir in "$APPIMG_DIR"/*; do
         [[ ! -d "$dir" ]] && continue
 
+        # Find the first AppImage file (case-insensitive)
         appimage=$(find "$dir" -maxdepth 1 -type f -iname "*.AppImage" | head -n 1)
         [[ -z "$appimage" ]] && continue
 
-        name=$(basename "$appimage" .AppImage)
+        # Get base name (strip extension, case-insensitive)
+        filename=$(basename "$appimage")
+        name="${filename%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}"
+
         desktop_file="$dir/$name.desktop"
 
-        # Icon detection
+        # Icon detection (case-insensitive)
         icon=$(find "$dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
         if [[ -z "$icon" ]]; then
             icon="$APPIMG_DIR/placeholder-icon.png"
