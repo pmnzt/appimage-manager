@@ -75,12 +75,18 @@ cmd_move() {
 
         for f in "${files[@]}"; do
 
-            # Skip files already inside ~/.appimages
+            # Skip all files inside ~/.appimages except tmp/
             if [[ "$f" == "$APPIMG_DIR"* ]]; then
-                echo "Skipping (already in appimages): $f"
-                continue
+                # Allow files inside tmp
+                if [[ "$f" == "$APPIMG_DIR/tmp"* ]]; then
+                    # Do not skip
+                    :
+                else
+                    echo "Skipping (already managed): $f"
+                    continue
+                fi
             fi
-
+            
             name=$(appname_from_path "$f")
             dest="$APPIMG_DIR/$name"
             mkdir -p "$dest"

@@ -6,7 +6,7 @@
 
 2. appimg move
 - options: -s [to specify a directory (s as in the wordscope)], --all [moves all appimages it found]
-- example-output: if the directory ~/.appimages doesn't exist it creates it, each appimage file that was found (.AppIamge) gets moved to ~/.appimages each .AppImage file will have its own folder, command move should not attempt to move files from ~/.appimage to itself 
+- example-output: if the directory ~/.appimages doesn't exist it creates it, each appimage file that was found (.AppIamge) gets moved to ~/.appimages each .AppImage file will have its own folder, command move should not attempt to move files from ~/.appimage to itself, However it shouldn't skip ~/.appimages/tmp 
 - required-options: none; if `--all` isn't included in the command, the user must add the appimage file path after the command i.e: [appimg move ~/Downloads/myapp.AppImage]
 
 3. appimg update 
