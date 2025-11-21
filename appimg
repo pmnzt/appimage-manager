@@ -185,12 +185,24 @@ cmd_setup_all() {
 cmd_reset() {
     echo "Resetting AppImage structure..."
 
+    # ---------------------------------------------
+    # 1. Remove all .desktop symlinks pointing to ~/.appimages
+    # ---------------------------------------------
+    echo "Removing AppImage desktop entry symlinks..."
+    find "$DESKTOP_TARGET" -type l | while IFS= read -r link; do
+        target="$(readlink -f "$link")"
+        if [[ "$target" == "$APPIMG_DIR"* ]]; then
+            echo "Deleting symlink: $link"
+            rm -f "$link"
+        fi
+    done
+
     mkdir -p "$APPIMG_DIR/tmp"
 
     # ---------------------------------------------
-    # 1. Move all AppImage files into ~/.appimages/tmp
+    # 2. Move all AppImage files into ~/.appimages/tmp
     # ---------------------------------------------
-    find "$APPIMG_DIR" -mindepth 2 -type f -iname "*.AppImage" | while read -r f; do
+    find "$APPIMG_DIR" -mindepth 2 -type f -iname "*.AppImage" | while IFS= read -r f; do
         file_name=$(basename "$f")
         echo "Moving $f → $APPIMG_DIR/tmp/$file_name"
         mv "$f" "$APPIMG_DIR/tmp/$file_name" || {
@@ -200,18 +212,13 @@ cmd_reset() {
     done
 
     # ---------------------------------------------
-    # 2. Delete all folders inside ~/.appimages
+    # 3. Delete all folders inside ~/.appimages
     #    except: tmp/ and placeholder-icon.png
     # ---------------------------------------------
     for item in "$APPIMG_DIR"/*; do
         base="$(basename "$item")"
-
-        # Skip tmp dir
         [[ "$base" == "tmp" ]] && continue
-
-        # Skip placeholder icon
         [[ "$base" == "placeholder-icon.png" ]] && continue
-
         if [[ -d "$item" ]]; then
             echo "Deleting folder: $item"
             rm -rf "$item"
@@ -219,26 +226,14 @@ cmd_reset() {
     done
 
     # ---------------------------------------------
-    # 3. Remove executable bit from all AppImages in tmp
+    # 4. Remove executable bit from all AppImages in tmp
     # ---------------------------------------------
     echo "Removing executable permissions from AppImages in tmp/"
-    chmod -x "$APPIMG_DIR"/tmp/*.AppImage 2>/dev/null
-
-    # ---------------------------------------------
-    # 4. Remove all .desktop symlinks pointing to ~/.appimages
-    # ---------------------------------------------
-    echo "Removing AppImage desktop entry symlinks..."
-
-    # Find all symlinks inside ~/.local/share/applications that point into ~/.appimages
-    find "$DESKTOP_TARGET" -type l | while read -r link; do
-        target="$(readlink -f "$link")"
-
-        # If symlink target is inside ~/.appimages, delete it
-        if [[ "$target" == "$APPIMG_DIR"* ]]; then
-            echo "Deleting symlink: $link"
-            rm -f "$link"
-        fi
+    shopt -s nullglob
+    for f in "$APPIMG_DIR"/tmp/*.AppImage; do
+        chmod -x "$f"
     done
+    shopt -u nullglob
 
     echo "Reset complete!"
 }
