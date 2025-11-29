@@ -572,7 +572,7 @@ main() {
             echo "Commands:"
             echo "  appimg ls [-s dir]"
             echo "  appimg move [--all] [-s dir] [file.AppImage]"
-            echo "  appimg update [--icon|--icon-skip]"
+            echo "  appimg update [APPNAME] [--icon|--icon-skip]"
             echo "  appimg setup-all [--icon|--icon-skip]"
             echo "  appimg reset"
             echo "  appimg select <appname> [--switch <version>]"
