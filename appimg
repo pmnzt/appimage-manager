@@ -169,28 +169,26 @@ cmd_update() {
         desktop_file="$dir/$name.desktop"
 
         # Icon detection (case-insensitive). Prefer an icon file in the folder.
+
         icon=$(find "$dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
         if [[ -z "$icon" ]]; then
-            # Try to extract the AppImage and look for embedded icons.
             tmpdir=$(mktemp -d)
-            # Some AppImages support --appimage-extract; ignore failures.
             (cd "$tmpdir" && "$appimage" --appimage-extract >/dev/null 2>&1) || true
 
             if [[ -d "$tmpdir/squashfs-root" ]]; then
-                # Search for common icon file types inside the extracted content.
                 icon_candidate=$(find "$tmpdir/squashfs-root" -type f \( -iname '*.png' -o -iname '*.svg' -o -iname '*.xpm' \) -not -iname '*thumbnail*' | head -n 1)
                 if [[ -n "$icon_candidate" ]]; then
                     ext="${icon_candidate##*.}"
-                    # Copy the found icon into the app folder as icon.<ext>
                     cp "$icon_candidate" "$dir/icon.$ext" 2>/dev/null || true
                     icon="$dir/icon.$ext"
+                    # Create .noiconkeep marker file
+                    touch "$dir/.noiconkeep"
                 else
                     icon="$APPIMG_DIR/placeholder-icon.png"
                 fi
             else
                 icon="$APPIMG_DIR/placeholder-icon.png"
             fi
-
             rm -rf "$tmpdir"
         fi
 
@@ -253,13 +251,17 @@ cmd_reset() {
         echo "Moving $f → $APPIMG_DIR/tmp/$file_name"
         mv "$f" "$APPIMG_DIR/tmp/$file_name" || continue
 
-        # Check for any icon in the same folder
-        icon=$(find "$app_dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
-        if [[ -n "$icon" && -f "$icon" ]]; then
-            icon_ext="${icon##*.}"
-            icon_name="${file_name%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}-icon.$icon_ext"
-            echo "Moving icon $icon → $APPIMG_DIR/tmp/$icon_name"
-            mv "$icon" "$APPIMG_DIR/tmp/$icon_name" || echo "Failed to move icon $icon"
+        # Check for .noiconkeep marker; if present, skip moving icon
+        if [[ ! -f "$app_dir/.noiconkeep" ]]; then
+            icon=$(find "$app_dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
+            if [[ -n "$icon" && -f "$icon" ]]; then
+                icon_ext="${icon##*.}"
+                icon_name="${file_name%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}-icon.$icon_ext"
+                echo "Moving icon $icon → $APPIMG_DIR/tmp/$icon_name"
+                mv "$icon" "$APPIMG_DIR/tmp/$icon_name" || echo "Failed to move icon $icon"
+            fi
+        else
+            echo "Skipping icon move for $app_dir due to .noiconkeep"
         fi
     done
 
