@@ -172,22 +172,61 @@ cmd_update() {
 
         icon=$(find "$dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
         if [[ -z "$icon" ]]; then
-            tmpdir=$(mktemp -d)
-            (cd "$tmpdir" && "$appimage" --appimage-extract >/dev/null 2>&1) || true
+            read -p "No icon found for $name. Would you like to try extracting icons from the AppImage? [y/N]: " extract_icon
+            if [[ "$extract_icon" =~ ^[Yy]$ ]]; then
+                tmpdir=$(mktemp -d)
+                (cd "$tmpdir" && "$appimage" --appimage-extract >/dev/null 2>&1) || true
 
-            if [[ -d "$tmpdir/squashfs-root" ]]; then
-                # Try to pick the correct icon by reading the embedded .desktop file's Icon key
-                icon_candidate=""
-                desktop_inside=$(find "$tmpdir/squashfs-root" -type f -iname "*.desktop" | head -n 1)
-                if [[ -n "$desktop_inside" ]]; then
-                    icon_name=$(grep -Ei '^Icon=' "$desktop_inside" | head -n1 | sed -E 's/Icon=//I') || true
-                    icon_name="${icon_name%%$'\r'}"
-                    if [[ -n "$icon_name" ]]; then
-                        # Search for SVG first in common icon directories
-                        icon_candidate=$(find "$tmpdir/squashfs-root" \( -path "*/usr/share/icons/*" -o -path "*/usr/share/pixmaps/*" -o -path "*/share/icons/*" -o -path "*/share/pixmaps/*" -o -path "*" \) -type f \( -iname "$icon_name.svg" -o -iname "${icon_name,,}.svg" -o -iname "${icon_name^^}.svg" \) | head -n 1 || true)
-                        # If no SVG, try PNG in same dirs, pick largest
-                        if [[ -z "$icon_candidate" ]]; then
-                            mapfile -t png_candidates < <(find "$tmpdir/squashfs-root" \( -path "*/usr/share/icons/*" -o -path "*/usr/share/pixmaps/*" -o -path "*/share/icons/*" -o -path "*/share/pixmaps/*" -o -path "*" \) -type f \( -iname "$icon_name.png" -o -iname "${icon_name,,}.png" -o -iname "${icon_name^^}.png" \))
+                if [[ -d "$tmpdir/squashfs-root" ]]; then
+                    # Try to pick the correct icon by reading the embedded .desktop file's Icon key
+                    icon_candidate=""
+                    desktop_inside=$(find "$tmpdir/squashfs-root" -type f -iname "*.desktop" | head -n 1)
+                    if [[ -n "$desktop_inside" ]]; then
+                        icon_name=$(grep -Ei '^Icon=' "$desktop_inside" | head -n1 | sed -E 's/Icon=//I') || true
+                        icon_name="${icon_name%%$'\r'}"
+                        if [[ -n "$icon_name" ]]; then
+                            # Search for SVG first in common icon directories
+                            icon_candidate=$(find "$tmpdir/squashfs-root" \( -path "*/usr/share/icons/*" -o -path "*/usr/share/pixmaps/*" -o -path "*/share/icons/*" -o -path "*/share/pixmaps/*" -o -path "*" \) -type f \( -iname "$icon_name.svg" -o -iname "${icon_name,,}.svg" -o -iname "${icon_name^^}.svg" \) | head -n 1 || true)
+                            # If no SVG, try PNG in same dirs, pick largest
+                            if [[ -z "$icon_candidate" ]]; then
+                                mapfile -t png_candidates < <(find "$tmpdir/squashfs-root" \( -path "*/usr/share/icons/*" -o -path "*/usr/share/pixmaps/*" -o -path "*/share/icons/*" -o -path "*/share/pixmaps/*" -o -path "*" \) -type f \( -iname "$icon_name.png" -o -iname "${icon_name,,}.png" -o -iname "${icon_name^^}.png" \))
+                                best_png=""
+                                best_size=0
+                                for ic in "${png_candidates[@]}"; do
+                                    size=$(stat -c %s "$ic" 2>/dev/null)
+                                    if (( size > best_size )); then
+                                        best_size=$size
+                                        best_png="$ic"
+                                    fi
+                                done
+                                icon_candidate="$best_png"
+                            fi
+                            # If still not found, try XPM
+                            if [[ -z "$icon_candidate" ]]; then
+                                icon_candidate=$(find "$tmpdir/squashfs-root" \( -path "*/usr/share/icons/*" -o -path "*/usr/share/pixmaps/*" -o -path "*/share/icons/*" -o -path "*/share/pixmaps/*" -o -path "*" \) -type f \( -iname "$icon_name.xpm" -o -iname "${icon_name,,}.xpm" -o -iname "${icon_name^^}.xpm" \) | head -n 1 || true)
+                            fi
+                        fi
+                    fi
+
+                    # Fallback: pick the best SVG, else largest PNG, else largest XPM
+                    if [[ -z "$icon_candidate" ]]; then
+                        # Prefer SVG
+                        mapfile -t svg_candidates < <(find "$tmpdir/squashfs-root" -type f -iname '*.svg' -not -iname '*thumbnail*')
+                        if [[ ${#svg_candidates[@]} -gt 0 ]]; then
+                            # Pick largest SVG
+                            best_svg=""
+                            best_size=0
+                            for ic in "${svg_candidates[@]}"; do
+                                size=$(stat -c %s "$ic" 2>/dev/null)
+                                if (( size > best_size )); then
+                                    best_size=$size
+                                    best_svg="$ic"
+                                fi
+                            done
+                            icon_candidate="$best_svg"
+                        else
+                            # Pick largest PNG
+                            mapfile -t png_candidates < <(find "$tmpdir/squashfs-root" -type f -iname '*.png' -not -iname '*thumbnail*')
                             best_png=""
                             best_size=0
                             for ic in "${png_candidates[@]}"; do
@@ -198,73 +237,39 @@ cmd_update() {
                                 fi
                             done
                             icon_candidate="$best_png"
-                        fi
-                        # If still not found, try XPM
-                        if [[ -z "$icon_candidate" ]]; then
-                            icon_candidate=$(find "$tmpdir/squashfs-root" \( -path "*/usr/share/icons/*" -o -path "*/usr/share/pixmaps/*" -o -path "*/share/icons/*" -o -path "*/share/pixmaps/*" -o -path "*" \) -type f \( -iname "$icon_name.xpm" -o -iname "${icon_name,,}.xpm" -o -iname "${icon_name^^}.xpm" \) | head -n 1 || true)
+                            # If still not found, pick largest XPM
+                            if [[ -z "$icon_candidate" ]]; then
+                                mapfile -t xpm_candidates < <(find "$tmpdir/squashfs-root" -type f -iname '*.xpm' -not -iname '*thumbnail*')
+                                best_xpm=""
+                                best_size=0
+                                for ic in "${xpm_candidates[@]}"; do
+                                    size=$(stat -c %s "$ic" 2>/dev/null)
+                                    if (( size > best_size )); then
+                                        best_size=$size
+                                        best_xpm="$ic"
+                                    fi
+                                done
+                                icon_candidate="$best_xpm"
+                            fi
                         fi
                     fi
-                fi
 
-                # Fallback: pick the best SVG, else largest PNG, else largest XPM
-                if [[ -z "$icon_candidate" ]]; then
-                    # Prefer SVG
-                    mapfile -t svg_candidates < <(find "$tmpdir/squashfs-root" -type f -iname '*.svg' -not -iname '*thumbnail*')
-                    if [[ ${#svg_candidates[@]} -gt 0 ]]; then
-                        # Pick largest SVG
-                        best_svg=""
-                        best_size=0
-                        for ic in "${svg_candidates[@]}"; do
-                            size=$(stat -c %s "$ic" 2>/dev/null)
-                            if (( size > best_size )); then
-                                best_size=$size
-                                best_svg="$ic"
-                            fi
-                        done
-                        icon_candidate="$best_svg"
+                    if [[ -n "$icon_candidate" ]]; then
+                        ext="${icon_candidate##*.}"
+                        cp "$icon_candidate" "$dir/icon.$ext" 2>/dev/null || true
+                        icon="$dir/icon.$ext"
+                        # Create .noiconkeep marker file
+                        touch "$dir/.noiconkeep"
                     else
-                        # Pick largest PNG
-                        mapfile -t png_candidates < <(find "$tmpdir/squashfs-root" -type f -iname '*.png' -not -iname '*thumbnail*')
-                        best_png=""
-                        best_size=0
-                        for ic in "${png_candidates[@]}"; do
-                            size=$(stat -c %s "$ic" 2>/dev/null)
-                            if (( size > best_size )); then
-                                best_size=$size
-                                best_png="$ic"
-                            fi
-                        done
-                        icon_candidate="$best_png"
-                        # If still not found, pick largest XPM
-                        if [[ -z "$icon_candidate" ]]; then
-                            mapfile -t xpm_candidates < <(find "$tmpdir/squashfs-root" -type f -iname '*.xpm' -not -iname '*thumbnail*')
-                            best_xpm=""
-                            best_size=0
-                            for ic in "${xpm_candidates[@]}"; do
-                                size=$(stat -c %s "$ic" 2>/dev/null)
-                                if (( size > best_size )); then
-                                    best_size=$size
-                                    best_xpm="$ic"
-                                fi
-                            done
-                            icon_candidate="$best_xpm"
-                        fi
+                        icon="$APPIMG_DIR/placeholder-icon.png"
                     fi
-                fi
-
-                if [[ -n "$icon_candidate" ]]; then
-                    ext="${icon_candidate##*.}"
-                    cp "$icon_candidate" "$dir/icon.$ext" 2>/dev/null || true
-                    icon="$dir/icon.$ext"
-                    # Create .noiconkeep marker file
-                    touch "$dir/.noiconkeep"
                 else
                     icon="$APPIMG_DIR/placeholder-icon.png"
                 fi
+                rm -rf "$tmpdir"
             else
                 icon="$APPIMG_DIR/placeholder-icon.png"
             fi
-            rm -rf "$tmpdir"
         fi
 
         echo "Generating $desktop_file"

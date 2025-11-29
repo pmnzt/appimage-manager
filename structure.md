@@ -37,7 +37,7 @@ This document describes the CLI commands and expected behavior for managing AppI
 				 - If no matching SVG, search for a matching PNG and prefer the largest PNG file by file size.
 				 - If still not found, search for a matching XPM.
 				 - If no direct match is found, fall back to the largest SVG, then largest PNG, then largest XPM from the extracted contents.
-			3. If no icon is found at all, use `~/.appimages/placeholder-icon.png`.
+			3. If no icon is found at all, ask the user if they would like to extract icons from the AppImage. If the user declines or no icon can be extracted, use `~/.appimages/placeholder-icon.png`.
 		- Copy the chosen icon into the app's folder as `icon.*`.
 		- Create a `.noiconkeep` marker if needed to prevent icon copying on reset.
 		- Ensure the AppImage file is executable.
