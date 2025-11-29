@@ -176,7 +176,23 @@ cmd_update() {
             (cd "$tmpdir" && "$appimage" --appimage-extract >/dev/null 2>&1) || true
 
             if [[ -d "$tmpdir/squashfs-root" ]]; then
-                icon_candidate=$(find "$tmpdir/squashfs-root" -type f \( -iname '*.png' -o -iname '*.svg' -o -iname '*.xpm' \) -not -iname '*thumbnail*' | head -n 1)
+                # Try to pick the correct icon by reading the embedded .desktop file's Icon key
+                icon_candidate=""
+                desktop_inside=$(find "$tmpdir/squashfs-root" -type f -iname "*.desktop" | head -n 1)
+                if [[ -n "$desktop_inside" ]]; then
+                    icon_name=$(grep -Ei '^Icon=' "$desktop_inside" | head -n1 | sed -E 's/Icon=//I') || true
+                    icon_name="${icon_name%%$'\r'}"
+                    if [[ -n "$icon_name" ]]; then
+                        # Search for files whose basename (without ext) matches the icon name
+                        icon_candidate=$(find "$tmpdir/squashfs-root" -type f \( -iname "$icon_name.*" -o -iname "${icon_name,,}.*" -o -iname "${icon_name^^}.*" \) \( -iname '*.png' -o -iname '*.svg' -o -iname '*.xpm' \) | head -n 1 || true)
+                    fi
+                fi
+
+                # Fallback: pick the first image candidate if none found via .desktop Icon
+                if [[ -z "$icon_candidate" ]]; then
+                    icon_candidate=$(find "$tmpdir/squashfs-root" -type f \( -iname '*.png' -o -iname '*.svg' -o -iname '*.xpm' \) -not -iname '*thumbnail*' | head -n 1 || true)
+                fi
+
                 if [[ -n "$icon_candidate" ]]; then
                     ext="${icon_candidate##*.}"
                     cp "$icon_candidate" "$dir/icon.$ext" 2>/dev/null || true
