@@ -150,29 +150,34 @@ cmd_move() {
 # Command: appimg update
 # ------------------------------------------------------------
 cmd_update() {
+    local extract_icons=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --icon) extract_icons=1; shift ;;
+            *) shift ;;
+        esac
+    done
+
     [[ ! -d "$APPIMG_DIR" ]] && die "$APPIMG_DIR does not exist."
 
     for dir in "$APPIMG_DIR"/*; do
         [[ ! -d "$dir" ]] && continue
 
-        # Find the first AppImage file (case-insensitive)
         appimage=$(find "$dir" -maxdepth 1 -type f -iname "*.AppImage" | head -n 1)
         [[ -z "$appimage" ]] && continue
 
-        # Make sure the AppImage is executable
         chmod +x "$appimage"
-
-        # Get base name (strip extension, case-insensitive)
         filename=$(basename "$appimage")
         name="${filename%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}"
-
         desktop_file="$dir/$name.desktop"
-
-        # Icon detection (case-insensitive). Prefer an icon file in the folder.
 
         icon=$(find "$dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
         if [[ -z "$icon" ]]; then
-            read -p "No icon found for $name. Would you like to try extracting icons from the AppImage? [y/N]: " extract_icon
+            if [[ $extract_icons -eq 1 ]]; then
+                extract_icon="y"
+            else
+                read -p "No icon found for $name. Would you like to try extracting icons from the AppImage? [y/N]: " extract_icon
+            fi
             if [[ "$extract_icon" =~ ^[Yy]$ ]]; then
                 tmpdir=$(mktemp -d)
                 (cd "$tmpdir" && "$appimage" --appimage-extract >/dev/null 2>&1) || true
@@ -297,8 +302,19 @@ EOF
 # Command: appimg setup-all
 # ------------------------------------------------------------
 cmd_setup_all() {
+    local extract_icons=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --icon) extract_icons=1; shift ;;
+            *) shift ;;
+        esac
+    done
     cmd_move --all
-    cmd_update
+    if [[ $extract_icons -eq 1 ]]; then
+        cmd_update --icon
+    else
+        cmd_update
+    fi
 }
 
 
@@ -380,16 +396,16 @@ main() {
     case "$1" in
         ls)        shift; cmd_ls "$@" ;;
         move)      shift; cmd_move "$@" ;;
-        update)    shift; cmd_update ;;
-        setup-all) shift; cmd_setup_all ;;
+        update)    shift; cmd_update "$@" ;;
+        setup-all) shift; cmd_setup_all "$@" ;;
         reset) shift; cmd_reset ;;
         *)
             echo "AppImage manager"
             echo "Commands:"
             echo "  appimg ls [-s dir]"
             echo "  appimg move [--all] [-s dir] [file.AppImage]"
-            echo "  appimg update"
-            echo "  appimg setup-all"
+            echo "  appimg update [--icon]"
+            echo "  appimg setup-all [--icon]"
             echo "  appimg reset"
             exit 1
             ;;
