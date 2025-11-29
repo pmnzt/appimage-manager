@@ -97,7 +97,7 @@ Description:
 Usage:
 
 ```bash
-appimg update [--icon | --icon-skip]
+appimg update [APPNAME] [--icon | --icon-skip]
 ```
 
 Description:
@@ -155,6 +155,26 @@ After resetting, re-register AppImages with:
 ```bash
 appimg setup-all
 ```
+
+6) `appimg select`
+
+Usage:
+
+```bash
+appimg select <appname>
+appimg select <appname> --switch <VERSION>
+```
+
+Description:
+
+- **Purpose:** Manage and switch between multiple versions of an AppImage for a given application.
+- `appimg select <appname>`: Lists available versions for `<appname>` and shows the active one.
+- `appimg select <appname> --switch <VERSION>`: Switches the active version.
+- **Details:**
+    - `appimg move` handles versioning by adding a `#version-string` to AppImage filenames when duplicates are found (e.g., `my-app#1.AppImage`, `my-app#2.AppImage`).
+    - All versions are kept in the same directory (e.g., `~/.appimages/my-app/`).
+    - A `my-app.AppImage` symlink points to the active version.
+    - Switching versions updates this symlink and runs `appimg update` to refresh the `.desktop` file.
 
 ## Example workflow
 
