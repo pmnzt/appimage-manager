@@ -104,16 +104,20 @@ Generates `.desktop` files and symlinks.
 
 #### Usage
 ```bash
-appimg update
+appimg update [--icon|--icon-skip]
 ```
 
 #### Description
 - Scans `~/.appimages`.
 - Creates a `.desktop` launcher for each AppImage.
-- Uses `icon.*` if available, otherwise uses `placeholder-icon.png`.
+- Icon handling:
+    - If `icon.*` exists alongside the AppImage, it is used.
+    - If no icon is present and `--icon` is provided, the tool will automatically extract icons from the AppImage.
+    - If `--icon-skip` is provided, extraction will be skipped and the placeholder icon will be used.
+    - If neither flag is provided, the tool will prompt interactively whether to try extraction; if declined or extraction fails, the placeholder icon is used.
 - Creates symlinks in `~/.local/share/applications`.
 
-> **Reminder:** If you added or changed any icons, always run `appimg update` to refresh the `.desktop` entries.
+> **Reminder:** If you added or changed any icons, always run `appimg update` to refresh the `.desktop` entries. Use `appimg update --icon` to attempt automatic extraction when needed, or `--icon-skip` to explicitly avoid extraction.
 
 ---
 
@@ -122,7 +126,7 @@ Runs **move** + **update** automatically.
 
 #### Usage
 ```bash
-appimg setup-all
+appimg setup-all [--icon|--icon-skip]
 ```
 
 #### Description
@@ -130,7 +134,7 @@ Equivalent to:
 
 ```bash
 appimg move --all
-appimg update
+appimg update [--icon|--icon-skip]
 ```
 
 ---
