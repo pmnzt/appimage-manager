@@ -151,12 +151,18 @@ cmd_move() {
 # ------------------------------------------------------------
 cmd_update() {
     local extract_icons=0
+    local skip_extract=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --icon) extract_icons=1; shift ;;
+            --icon-skip) skip_extract=1; shift ;;
             *) shift ;;
         esac
     done
+
+    if [[ $extract_icons -eq 1 && $skip_extract -eq 1 ]]; then
+        die "Cannot specify both --icon and --icon-skip."
+    fi
 
     [[ ! -d "$APPIMG_DIR" ]] && die "$APPIMG_DIR does not exist."
 
@@ -175,6 +181,8 @@ cmd_update() {
         if [[ -z "$icon" ]]; then
             if [[ $extract_icons -eq 1 ]]; then
                 extract_icon="y"
+            elif [[ $skip_extract -eq 1 ]]; then
+                extract_icon="n"
             else
                 read -p "No icon found for $name. Would you like to try extracting icons from the AppImage? [y/N]: " extract_icon
             fi
@@ -303,15 +311,24 @@ EOF
 # ------------------------------------------------------------
 cmd_setup_all() {
     local extract_icons=0
+    local skip_extract=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --icon) extract_icons=1; shift ;;
+            --icon-skip) skip_extract=1; shift ;;
             *) shift ;;
         esac
     done
+
+    if [[ $extract_icons -eq 1 && $skip_extract -eq 1 ]]; then
+        die "Cannot specify both --icon and --icon-skip."
+    fi
+
     cmd_move --all
     if [[ $extract_icons -eq 1 ]]; then
         cmd_update --icon
+    elif [[ $skip_extract -eq 1 ]]; then
+        cmd_update --icon-skip
     else
         cmd_update
     fi
@@ -404,8 +421,8 @@ main() {
             echo "Commands:"
             echo "  appimg ls [-s dir]"
             echo "  appimg move [--all] [-s dir] [file.AppImage]"
-            echo "  appimg update [--icon]"
-            echo "  appimg setup-all [--icon]"
+            echo "  appimg update [--icon|--icon-skip]"
+            echo "  appimg setup-all [--icon|--icon-skip]"
             echo "  appimg reset"
             exit 1
             ;;
