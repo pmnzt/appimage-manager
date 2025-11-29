@@ -10,10 +10,16 @@
 - required-options: none; if `--all` isn't included in the command, the user must add the appimage file path after the command i.e: [appimg move ~/Downloads/myapp.AppImage]
 
 3. appimg update 
-this command will look in ~/.appimages then in each folder that has a .AppImage file, it will generate a .desktop file if there is a `icon.*` file in the same folder as the .AppImage it will add that as the icon in the .dekstop file, if there is not it will use `~/.appimages/placeholder-icon.png`, and then finally create a symlink for that .desktop file to the direcoty in which the system uses to store .desktop files.
-account for some files might be .AppImage or .appimage (case-insensitive).
-make sure the appimge file is executable.
-if there's no icon find the appimage's original icon by extracting the appimage file (be sure to use the correct icon), and use that (in this case generate a new file .noiconkeep move into the appimage folder then next time if an appimg reset happens and this file exists in an appimage's folder then do not copy it's icon).
+this command will look in ~/.appimages then in each folder that has a .AppImage file, it will generate a .desktop file. For the icon, it will:
+- Use `icon.*` in the folder if present.
+- Otherwise, extract the AppImage and:
+	- Read the embedded .desktop file's `Icon` key and search for a matching SVG in common icon directories (usr/share/icons, usr/share/pixmaps, etc.).
+	- If no SVG is found, search for a matching PNG and select the largest one by file size.
+	- If still not found, search for a matching XPM.
+	- If no match, fallback to the largest SVG, then largest PNG, then largest XPM in the extracted contents.
+- If no icon is found, use `~/.appimages/placeholder-icon.png`.
+The selected icon is copied to the appimage folder as `icon.*`. A `.noiconkeep` marker is created to prevent icon copying on reset. The appimage file is made executable. Finally, a symlink for the .desktop file is created in the system's applications directory.
+Account for some files might be .AppImage or .appimage (case-insensitive).
 
 4. appimage setup-all
 this command will run commands 2,3 with their default options.
