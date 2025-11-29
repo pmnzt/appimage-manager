@@ -26,7 +26,7 @@ This document describes the CLI commands and expected behavior for managing AppI
 
 3) `appimg update`
 - Description: Scan `~/.appimages`, and for each folder containing an AppImage generate a `.desktop` file and ensure a proper icon and executable bit.
-- Usage: `appimg update`
+- Usage: `appimg update [--icon|--icon-skip]`
 - Behavior:
 	- For each folder in `~/.appimages` that contains an AppImage:
 		- Generate or update the `.desktop` file for the application.
@@ -37,7 +37,10 @@ This document describes the CLI commands and expected behavior for managing AppI
 				 - If no matching SVG, search for a matching PNG and prefer the largest PNG file by file size.
 				 - If still not found, search for a matching XPM.
 				 - If no direct match is found, fall back to the largest SVG, then largest PNG, then largest XPM from the extracted contents.
-			3. If no icon is found at all, ask the user if they would like to extract icons from the AppImage. If the user declines or no icon can be extracted, use `~/.appimages/placeholder-icon.png`.
+			  3. If no icon is found at all:
+				  - If `--icon` was provided, automatically attempt to extract icons from the AppImage.
+				  - If `--icon-skip` was provided, do not attempt extraction and use `~/.appimages/placeholder-icon.png`.
+				  - If neither option is provided, ask the user if they would like to extract icons from the AppImage. If the user declines or no icon can be extracted, use `~/.appimages/placeholder-icon.png`.
 		- Copy the chosen icon into the app's folder as `icon.*`.
 		- Create a `.noiconkeep` marker if needed to prevent icon copying on reset.
 		- Ensure the AppImage file is executable.
@@ -46,6 +49,7 @@ This document describes the CLI commands and expected behavior for managing AppI
 
 4) `appimg setup-all`
 - Description: Convenience command that runs `appimg move` and `appimg update` with their default options to discover, move, and register AppImages.
+- Usage: `appimg setup-all [--icon|--icon-skip]`
 
 5) `appimg reset`
 - Description: Reset the managed AppImage state. Move managed AppImages to a temporary area, remove their folders, and undo registration.
