@@ -173,11 +173,21 @@ cmd_move() {
 cmd_update() {
     local extract_icons=0
     local skip_extract=0
+    local target_app_name=""
+
+    # Parse arguments
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --icon) extract_icons=1; shift ;;
             --icon-skip) skip_extract=1; shift ;;
-            *) shift ;;
+            -*) die "Unknown option for update: $1" ;;
+            *)
+                if [[ -n "$target_app_name" ]]; then
+                    die "update command only accepts one app name argument."
+                fi
+                target_app_name="$1"
+                shift
+                ;;
         esac
     done
 
@@ -187,7 +197,18 @@ cmd_update() {
 
     [[ ! -d "$APPIMG_DIR" ]] && die "$APPIMG_DIR does not exist."
 
-    for dir in "$APPIMG_DIR"/*; do
+    local dirs_to_update
+    if [[ -n "$target_app_name" ]]; then
+        local target_dir="$APPIMG_DIR/$target_app_name"
+        if [[ ! -d "$target_dir" ]]; then
+            die "Application '$target_app_name' not found."
+        fi
+        dirs_to_update=("$target_dir")
+    else
+        dirs_to_update=("$APPIMG_DIR"/*)
+    fi
+
+    for dir in "${dirs_to_update[@]}"; do
         [[ ! -d "$dir" ]] && continue
         local name
         name=$(basename "$dir")
@@ -530,7 +551,7 @@ cmd_select() {
         target_basename=$(basename "$target_appimage_path")
         (cd "$app_dir" && ln -sf "$target_basename" "$app_name.AppImage")
         echo "Switched $app_name to $target_basename"
-        cmd_update
+        cmd_update "$app_name"
     fi
 }
 
