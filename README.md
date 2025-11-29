@@ -55,6 +55,8 @@ If no icon is available, the `placeholder-icon.png` file will be used.
 
 ## Commands
 
+Below are the primary `appimg` commands and expected behavior. Notes: file-extension matching is case-insensitive (e.g. `.AppImage`, `.appimage`) and the default search scope is the user's home directory (`$HOME`). The managed directory is `~/.appimages` and the placeholder icon path is `~/.appimages/placeholder-icon.png`.
+
 1) `appimg ls`
 
 Usage:
@@ -66,8 +68,9 @@ appimg ls -s /path/to/search
 
 Description:
 
-- Lists discovered `.AppImage` files.
-- Default search path: `$HOME`.
+- **Purpose:** List discovered AppImage files.
+- **Options:** `-s DIR` — specify a directory to search (default: `$HOME`).
+- **Output:** Prints each found AppImage with its full path.
 
 2) `appimg move`
 
@@ -81,8 +84,13 @@ appimg move -s ~/Downloads --all
 
 Description:
 
-- Moves AppImages into the `~/.appimages` structure.
-- Creates `~/.appimages` if it does not exist.
+- **Purpose:** Move AppImage files into the managed directory (`~/.appimages`). Each AppImage is placed inside its own folder.
+- **Options:** `-s DIR` — search directory; `--all` — move all AppImages found in the search scope. If `--all` is omitted you must provide a path to a single AppImage file.
+- **Behavior:**
+    - Create `~/.appimages` if it does not exist.
+    - Do not move files that are already located inside `~/.appimages` into the same location.
+    - Handle `~/.appimages/tmp` specially: avoid moving a file into the same folder and do not treat `tmp` as an ordinary application folder.
+    - File-extension matching is case-insensitive.
 
 3) `appimg update`
 
@@ -94,13 +102,22 @@ appimg update [--icon | --icon-skip]
 
 Description:
 
-- Scans `~/.appimages` and creates a `.desktop` file for each AppImage.
-- Icon handling:
-  - If an `icon.*` file exists alongside the AppImage it is used.
-  - `--icon` attempts automatic icon extraction from the AppImage when no icon file is present.
-  - `--icon-skip` forces use of the placeholder and skips extraction.
-  - If neither flag is provided the tool may prompt interactively; if extraction is not performed or fails, the placeholder is used.
-- Creates symlinks in `~/.local/share/applications`.
+- **Purpose:** Scan `~/.appimages` and for each app folder containing an AppImage generate or update a `.desktop` launcher, ensure the AppImage is executable, and manage the app icon.
+- **Icon selection precedence:**
+    1. If `icon.*` already exists in the app folder, use it.
+ 2. Otherwise, attempt to extract or locate an icon from the AppImage:
+         - Inspect the AppImage's embedded `.desktop` `Icon` key (if present) and try to find a matching icon name in common system icon directories such as `/usr/share/icons` and `/usr/share/pixmaps`.
+         - Prefer SVGs first. If no SVG is found, search for PNGs and prefer the largest PNG by file size. If still not found, look for XPM.
+         - If no direct name match is found in system dirs, fall back to choosing the largest SVG from the extracted contents, then largest PNG, then largest XPM.
+ 3. If no icon is found at all:
+         - If `--icon` was provided, attempt automatic icon extraction from the AppImage.
+         - If `--icon-skip` was provided, skip extraction and use the placeholder icon (`~/.appimages/placeholder-icon.png`).
+         - If neither flag is provided, `appimg` may prompt interactively to ask whether to attempt extraction; if the user declines or extraction fails, the placeholder is used.
+- **Additional behavior:**
+    - The chosen icon is copied into the app folder as `icon.*`.
+    - A `.noiconkeep` marker file may be created when needed to indicate the icon should be preserved across resets.
+    - Ensure the AppImage file is executable.
+    - Create or update a `.desktop` file for the app and symlink it into the user's applications directory (typically `~/.local/share/applications`).
 
 4) `appimg setup-all`
 
@@ -112,7 +129,7 @@ appimg setup-all [--icon | --icon-skip]
 
 Description:
 
-Performs `appimg move --all` followed by `appimg update` (honoring the same icon flags).
+- **Purpose:** Convenience command that runs `appimg move --all` followed by `appimg update` (honoring the same icon flags) to discover, move, and register AppImages in one step.
 
 5) `appimg reset`
 
@@ -124,10 +141,14 @@ appimg reset
 
 Description:
 
-- Moves all AppImages from `~/.appimages` into `~/.appimages/tmp/`.
-- Removes all other folders inside `~/.appimages` (except `tmp` and `placeholder-icon.png`).
-- Removes `.desktop` symlinks that point to AppImages.
-- Removes executable permissions from AppImages placed in `tmp/`.
+- **Purpose:** Reset the managed AppImage state by moving AppImages into a temporary area, removing application folders, and undoing registration.
+- **Behavior:**
+    - Move all AppImage files from their per-app folders in `~/.appimages` into `~/.appimages/tmp/`.
+    - When moving, also move any icon files that belong to an AppImage and rename them using the pattern `<appname>-icon.*` so they can be detected later by `appimg update`.
+    - After moving files to `~/.appimages/tmp`, delete the now-empty app folders.
+    - Mark the moved AppImage files as non-executable.
+    - Remove any `.desktop` symlinks that were created in the user's applications directory.
+    - `appimg update` is able to detect icons stored in `~/.appimages/tmp` (using the `<appname>-icon.*` pattern), rename them back to `icon.*`, and move them to the restored app folder when re-registering.
 
 After resetting, re-register AppImages with:
 
