@@ -530,7 +530,7 @@ cmd_select() {
         target_basename=$(basename "$target_appimage_path")
         (cd "$app_dir" && ln -sf "$target_basename" "$app_name.AppImage")
         echo "Switched $app_name to $target_basename"
-        echo "Run 'appimg update' to update desktop entries."
+        cmd_update
     fi
 }
 
