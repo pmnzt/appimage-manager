@@ -62,6 +62,22 @@ This document describes the CLI commands and expected behavior for managing AppI
 	- Remove any symlinks created in the system applications directory.
 	- `appimg update` should be able to detect icons in `~/.appimages/tmp` (using the `<appname>-icon.*` pattern), rename them to `icon.*` and move them back to the appropriate folders when restoring.
 
+6) `appimg select`
+- Description: Manage and switch between multiple versions of an AppImage for a given application name.
+- Usage:
+	- `appimg select <appname>`: List available versions for `<appname>` and indicate the currently active one.
+	- `appimg select <appname> --switch <VERSION>`: Switch the active AppImage version for `<appname>` to `<VERSION>`. The `<VERSION>` is a unique identifier, a string, or a numeric index.
+- Behavior:
+	- **Version Naming Convention**: When `appimg move` processes AppImages, if multiple versions of the same application (basically when there's more than one appimage of the same name) are detected, it appends a unique `#version-string` suffix to the filename (e.g., `krita#1.AppImage`, `krita#2.AppImage`). The `#` character denotes the start of the version string for identification purposes across commands.
+	- **Storage Location**: All versions of a single application are stored within the same dedicated subfolder under `~/.appimages` (e.g., `~/.appimages/krita/krita#1.AppImage`).
+	- **Active Version Symlink**: A symlink, named after the application without a version suffix (e.g., `~/.appimages/krita/krita.AppImage`), points to the currently active version. This symlink is the target for `.desktop` file entries and system integration.
+	- **`appimg select <appname>`**: Lists all available versioned AppImages (e.g., `krita#1.AppImage`, `krita#3.AppImage`) found in the application's folder and indicates which version the active symlink currently points to.
+	- **`appimg select <appname> --switch <VERSION>`**: Modifies the active symlink (e.g., `~/.appimages/krita/krita.AppImage`) to point to the AppImage file corresponding to `<VERSION>`. Subsequently, `appimg update` should be run to re-generate the `.desktop` file and ensure system integration reflects the new active version.
+	- **Interactions with other commands**:
+		- `appimg move`: Recognizes the `#` character as a version separator and ensures multiple versions of an application are grouped within the same folder.
+		- `appimg reset`: Removes the active version symlink (e.g., `krita.AppImage`) when moving AppImages to `~/.appimages/tmp`. The version string (e.g., `#1`) is preserved in the AppImage filename during this move.
+
+
 Notes
 - Treat `.AppImage` and `.appimage` equivalently (case-insensitive matching).
 - Default managed directory: `~/.appimages`.

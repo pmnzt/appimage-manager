@@ -31,7 +31,7 @@ find_appimages() {
 }
 
 appname_from_path() {
-    basename "$1" | sed 's/.AppImage$//'
+    basename "$1" | sed -E 's/\.AppImage$//i'
 }
 
 
@@ -74,7 +74,8 @@ cmd_move() {
         local file="$1"
         local fname
         fname=$(basename "$file")
-        echo "${fname%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}"
+        fname=$(echo "$fname" | sed -E 's/\.AppImage$//i')
+        echo "${fname%%#*}"
     }
 
     # Function to move icons from tmp associated with a given app
@@ -91,29 +92,59 @@ cmd_move() {
         shopt -u nullglob
     }
 
+    move_one_file() {
+        local f="$1"
+        # Skip all files inside ~/.appimages except tmp/
+        if [[ "$f" == "$APPIMG_DIR"* && "$f" != "$APPIMG_DIR/tmp"* ]]; then
+            echo "Skipping (already managed): $f"
+            return
+        fi
+
+        local filename
+        filename=$(basename "$f")
+        local name
+        name=$(get_base_name "$f")
+        local dest="$APPIMG_DIR/$name"
+        mkdir -p "$dest"
+
+        shopt -s nullglob
+        local versions=("$dest/$name"#*.AppImage)
+        shopt -u nullglob
+
+        # If no versioned files exist, check for a single non-versioned AppImage and version it
+        if [[ ${#versions[@]} -eq 0 && -f "$dest/$name.AppImage" && ! -L "$dest/$name.AppImage" ]]; then
+            echo "Found existing unversioned AppImage for $name. Converting to version #1."
+            mv "$dest/$name.AppImage" "$dest/$name#1.AppImage"
+            (cd "$dest" && ln -sf "$name#1.AppImage" "$name.AppImage")
+            versions=("$dest/$name#1.AppImage") # update versions array
+        fi
+
+        local next_version_num=$((${#versions[@]} + 1))
+        local new_versioned_filename="$dest/$name#$next_version_num.AppImage"
+
+        echo "Moving $f → $new_versioned_filename"
+        mv "$f" "$new_versioned_filename" || die "Failed to move $f"
+
+        local symlink="$dest/$name.AppImage"
+        # If no active version symlink exists, create one for the new file
+        if [[ ! -e "$symlink" ]]; then
+            echo "Setting $(basename "$new_versioned_filename") as active version."
+            (cd "$dest" && ln -sf "$(basename "$new_versioned_filename")" "$(basename "$symlink")")
+        fi
+
+        # Move associated icons from tmp if they exist
+        if [[ "$f" == "$APPIMG_DIR/tmp"* ]]; then
+            move_tmp_icons "$name"
+        fi
+    }
+
     # Move ALL AppImages
     if [[ "$do_all" -eq 1 ]]; then
         mapfile -t files < <(find_appimages "$search")
         [[ ${#files[@]} -eq 0 ]] && die "No AppImages found."
 
         for f in "${files[@]}"; do
-            # Skip all files inside ~/.appimages except tmp/
-            if [[ "$f" == "$APPIMG_DIR"* && "$f" != "$APPIMG_DIR/tmp"* ]]; then
-                echo "Skipping (already managed): $f"
-                continue
-            fi
-
-            filename=$(basename "$f")
-            name=$(get_base_name "$f")
-            dest="$APPIMG_DIR/$name"
-            mkdir -p "$dest"
-            echo "Moving $f → $dest/$filename"
-            mv "$f" "$dest/$filename" || die "Failed to move $f"
-
-            # Move associated icons from tmp if they exist
-            if [[ "$f" == "$APPIMG_DIR/tmp"* ]]; then
-                move_tmp_icons "$name"
-            fi
+            move_one_file "$f"
         done
         return
     fi
@@ -133,17 +164,7 @@ cmd_move() {
         die "File not found: $specific_file"
     fi
 
-    filename=$(basename "$specific_file")
-    name=$(get_base_name "$specific_file")
-    dest="$APPIMG_DIR/$name"
-    mkdir -p "$dest"
-    echo "Moving $specific_file → $dest/$filename"
-    mv "$specific_file" "$dest/$filename" || die "Failed to move file"
-
-    # Move associated icons from tmp if present, rename back to icon.*
-    if [[ "$specific_file" == "$APPIMG_DIR/tmp"* ]]; then
-        move_tmp_icons "$name"
-    fi
+    move_one_file "$specific_file"
 }
 
 # ------------------------------------------------------------
@@ -168,14 +189,28 @@ cmd_update() {
 
     for dir in "$APPIMG_DIR"/*; do
         [[ ! -d "$dir" ]] && continue
+        local name
+        name=$(basename "$dir")
 
-        appimage=$(find "$dir" -maxdepth 1 -type f -iname "*.AppImage" | head -n 1)
+        # The main appimage is the symlink if it exists
+        local appimage="$dir/$name.AppImage"
+        
+        # Fallback to first found if no symlink (for unversioned apps)
+        if [[ ! -e "$appimage" ]]; then
+            appimage=$(find "$dir" -maxdepth 1 -type f -iname "*.AppImage" | head -n 1)
+        fi
+        
         [[ -z "$appimage" ]] && continue
 
-        chmod +x "$appimage"
-        filename=$(basename "$appimage")
-        name="${filename%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}"
-        desktop_file="$dir/$name.desktop"
+        # The executable is the real file
+        local executable_appimage
+        executable_appimage=$(readlink -f "$appimage")
+        
+        chmod +x "$executable_appimage"
+        
+        local app_name_for_desktop
+        app_name_for_desktop=$(basename "$dir")
+        local desktop_file="$dir/$app_name_for_desktop.desktop"
 
         icon=$(find "$dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
         if [[ -z "$icon" ]]; then
@@ -184,11 +219,11 @@ cmd_update() {
             elif [[ $skip_extract -eq 1 ]]; then
                 extract_icon="n"
             else
-                read -p "No icon found for $name. Would you like to try extracting icons from the AppImage? [y/N]: " extract_icon
+                read -p "No icon found for $app_name_for_desktop. Would you like to try extracting icons from the AppImage? [y/N]: " extract_icon
             fi
             if [[ "$extract_icon" =~ ^[Yy]$ ]]; then
                 tmpdir=$(mktemp -d)
-                (cd "$tmpdir" && "$appimage" --appimage-extract >/dev/null 2>&1) || true
+                (cd "$tmpdir" && "$executable_appimage" --appimage-extract >/dev/null 2>&1) || true
 
                 if [[ -d "$tmpdir/squashfs-root" ]]; then
                     # Try to pick the correct icon by reading the embedded .desktop file's Icon key
@@ -290,7 +325,7 @@ cmd_update() {
         cat > "$desktop_file" <<EOF
 [Desktop Entry]
 Type=Application
-Name=$name
+Name=$app_name_for_desktop
 Exec="$appimage"
 Icon=$icon
 Terminal=false
@@ -300,8 +335,8 @@ EOF
         chmod +x "$desktop_file"
 
         # Symlink into applications directory
-        ln -sf "$desktop_file" "$DESKTOP_TARGET/$name.desktop"
-        echo "Linked → $DESKTOP_TARGET/$name.desktop"
+        ln -sf "$desktop_file" "$DESKTOP_TARGET/$app_name_for_desktop.desktop"
+        echo "Linked → $DESKTOP_TARGET/$app_name_for_desktop.desktop"
     done
 }
 
@@ -369,7 +404,9 @@ cmd_reset() {
             icon=$(find "$app_dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
             if [[ -n "$icon" && -f "$icon" ]]; then
                 icon_ext="${icon##*.}"
-                icon_name="${file_name%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}-icon.$icon_ext"
+                base_name="${file_name%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}"
+                app_name="${base_name%%#*}"
+                icon_name="${app_name}-icon.$icon_ext"
                 echo "Moving icon $icon → $APPIMG_DIR/tmp/$icon_name"
                 mv "$icon" "$APPIMG_DIR/tmp/$icon_name" || echo "Failed to move icon $icon"
             fi
@@ -407,6 +444,98 @@ cmd_reset() {
 
 
 # ------------------------------------------------------------
+# Command: appimg select
+# ------------------------------------------------------------
+cmd_select() {
+    [[ $# -eq 0 ]] && die "Usage: appimg select <appname> [--switch <version>]"
+    local app_name="$1"
+    shift
+    local app_dir="$APPIMG_DIR/$app_name"
+    [[ ! -d "$app_dir" ]] && die "Application not found: $app_name"
+
+    local do_switch=0
+    local target_version=""
+    if [[ "$1" == "--switch" ]]; then
+        do_switch=1
+        target_version="$2"
+        [[ -z "$target_version" ]] && die "No version specified for --switch"
+        shift 2
+    fi
+
+    # --- List versions ---
+    if [[ $do_switch -eq 0 ]]; then
+        echo "Available versions for $app_name:"
+        local active_path=""
+        local symlink_target=""
+        if [[ -L "$app_dir/$app_name.AppImage" ]]; then
+            active_path=$(readlink "$app_dir/$app_name.AppImage")
+            symlink_target=$(basename "$active_path")
+        fi
+
+        shopt -s nullglob
+        local versions=("$app_dir/$app_name"#*.AppImage)
+        shopt -u nullglob
+
+        if [[ ${#versions[@]} -eq 0 ]]; then
+            if [[ -f "$app_dir/$app_name.AppImage" ]]; then
+                echo " * $(basename "$app_dir/$app_name.AppImage") (active, no versions)"
+            else
+                echo "No versions found."
+            fi
+            return
+        fi
+
+        for v_path in "${versions[@]}"; do
+            v_base=$(basename "$v_path")
+            if [[ "$v_base" == "$symlink_target" ]]; then
+                echo " * $v_base (active)"
+            else
+                echo "   $v_base"
+            fi
+        done
+        return
+    fi
+
+    # --- Switch version ---
+    if [[ $do_switch -eq 1 ]]; then
+        local target_appimage_path=""
+        # Try to match version string directly
+        shopt -s nullglob
+        local found_versions=("$app_dir/$app_name#$target_version.AppImage" "$app_dir/$app_name#$target_version" "$app_dir/$target_version")
+        for v in "${found_versions[@]}"; do
+             if [[ -f "$v" ]]; then
+                target_appimage_path="$v"
+                break
+             fi
+        done
+
+        if [[ -z "$target_appimage_path" && -f "$app_dir/$target_version" ]]; then
+            target_appimage_path="$app_dir/$target_version"
+        fi
+        
+        # Try to match by index if not found (and is a number)
+        if [[ -z "$target_appimage_path" && "$target_version" =~ ^[0-9]+$ ]]; then
+            mapfile -t versions_sorted < <(find "$app_dir" -maxdepth 1 -type f -name "$app_name#*.AppImage" | sort -V)
+            if [[ ${#versions_sorted[@]} -gt 0 && $target_version -gt 0 && $target_version -le ${#versions_sorted[@]} ]]; then
+                target_appimage_path="${versions_sorted[$target_version-1]}"
+            fi
+        fi
+
+        if [[ -z "$target_appimage_path" || ! -f "$target_appimage_path" ]]; then
+            die "Version '$target_version' not found for $app_name."
+        fi
+
+        local symlink="$app_dir/$app_name.AppImage"
+        local target_basename
+        target_basename=$(basename "$target_appimage_path")
+        (cd "$app_dir" && ln -sf "$target_basename" "$app_name.AppImage")
+        echo "Switched $app_name to $target_basename"
+        echo "Run 'appimg update' to update desktop entries."
+    fi
+}
+
+
+# ------------------------------------------------------------
 # Dispatcher
 # ------------------------------------------------------------
 main() {
@@ -415,7 +544,8 @@ main() {
         move)      shift; cmd_move "$@" ;;
         update)    shift; cmd_update "$@" ;;
         setup-all) shift; cmd_setup_all "$@" ;;
-        reset) shift; cmd_reset ;;
+        reset)     shift; cmd_reset ;;
+        select)    shift; cmd_select "$@" ;;
         *)
             echo "AppImage manager"
             echo "Commands:"
@@ -424,6 +554,7 @@ main() {
             echo "  appimg update [--icon|--icon-skip]"
             echo "  appimg setup-all [--icon|--icon-skip]"
             echo "  appimg reset"
+            echo "  appimg select <appname> [--switch <version>]"
             exit 1
             ;;
     esac
