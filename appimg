@@ -5,14 +5,15 @@
 # Commands:
 #   appimg ls
 #   appimg move [--all] [-s dir] [file.AppImage]
-# ============================================================
-
-VERSION="0.1.1"
 #   appimg update
 #   appimg setup-all
 #   appimg reset
+#   appimg select <appname> [--switch <version>]
+#   appimg version
+#   appimg help
 # ============================================================
 
+VERSION="0.1.1"
 APPIMG_DIR="$HOME/.appimages"
 DESKTOP_TARGET="$HOME/.local/share/applications"
 
