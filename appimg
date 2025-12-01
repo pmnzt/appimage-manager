@@ -7,7 +7,7 @@
 #   appimg move [--all] [-s dir] [file.AppImage]
 # ============================================================
 
-VERSION="0.1.0"
+VERSION="0.1.1"
 #   appimg update
 #   appimg setup-all
 #   appimg reset
