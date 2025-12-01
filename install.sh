@@ -6,7 +6,7 @@ APP_NAME="appimg"
 REPO_API_URL="https://api.github.com/repos/pmnzt/appimage-manager"
 
 # Get the latest release tag
-RELEASE_TAG=$(curl -sSL "$REPO_API_URL/releases/latest" | jq -r '.tag_name')
+RELEASE_TAG=$(curl -sSL "$REPO_API_URL/releases/latest" | grep -oP '"tag_name":\s*"\K[^"]+')
 
 if [ -z "$RELEASE_TAG" ]; then
     echo "Error: Could not retrieve latest release tag."
