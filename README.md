@@ -20,15 +20,13 @@
 
 ## Installation
 
-Clone the repository and run the installer:
+To install `appimg`, simply run the following command:
 
 ```bash
-git clone https://github.com/pmnzt/appimage-manager
-cd appimage-manager
-sh install.sh
+curl -sSL https://raw.githubusercontent.com/pmnzt/appimage-manager/main/install.sh | bash
 ```
 
-This installs the `appimg` command on the system.
+This command downloads the `install.sh` script and pipes it directly to `bash` for execution, installing `appimg` to `/usr/local/bin` and setting up its man page and necessary directories.
 
 ## Man Pages
 
