@@ -3,14 +3,24 @@
 set -e  # Exit on error
 
 APP_NAME="appimg"
-REPO_BASE_URL="https://raw.githubusercontent.com/pmnzt/appimage-manager/main"
+REPO_API_URL="https://api.github.com/repos/pmnzt/appimage-manager"
+
+# Get the latest release tag
+RELEASE_TAG=$(curl -sSL "$REPO_API_URL/releases/latest" | jq -r '.tag_name')
+
+if [ -z "$RELEASE_TAG" ]; then
+    echo "Error: Could not retrieve latest release tag."
+    exit 1
+fi
+
+REPO_BASE_URL="https://github.com/pmnzt/appimage-manager/releases/download/$RELEASE_TAG"
 TMP_DIR=$(mktemp -d)
 
 echo "Installing $APP_NAME ..."
 
 # Download appimg script
 echo "Downloading $APP_NAME script..."
-curl -sSL "$REPO_BASE_URL/$APP_NAME" -o "$TMP_DIR/$APP_NAME"
+curl -sSL "$REPO_BASE_URL/appimg" -o "$TMP_DIR/$APP_NAME"
 chmod +x "$TMP_DIR/$APP_NAME"
 
 # Check if download was successful
@@ -40,7 +50,7 @@ MAN_PATH="/usr/local/share/man/man1"
 # Download and install man page
 echo "Downloading man page..."
 mkdir -p "$TMP_DIR/man/man1"
-curl -sSL "$REPO_BASE_URL/man/man1/appimg.1" -o "$TMP_DIR/man/man1/appimg.1"
+curl -sSL "$REPO_BASE_URL/appimg.1" -o "$TMP_DIR/man/man1/appimg.1"
 sudo mkdir -p "$MAN_PATH"
 sudo cp -f "$TMP_DIR/man/man1/appimg.1" "$MAN_PATH/appimg.1"
 sudo gzip -f "$MAN_PATH/appimg.1"
@@ -56,7 +66,7 @@ echo "Ensured directory exists: $APPIMG_DIR"
 # Download and move placeholder-icon.png into ~/.appimages
 echo "Downloading placeholder-icon.png..."
 mkdir -p "$TMP_DIR/assets/icons"
-curl -sSL "$REPO_BASE_URL/assets/icons/placeholder-icon.png" -o "$TMP_DIR/assets/icons/placeholder-icon.png"
+curl -sSL "$REPO_BASE_URL/placeholder-icon.png" -o "$TMP_DIR/assets/icons/placeholder-icon.png"
 if [ -f "$TMP_DIR/assets/icons/placeholder-icon.png" ]; then
     echo "Moving placeholder-icon.png → $APPIMG_DIR/"
     cp "$TMP_DIR/assets/icons/placeholder-icon.png" "$APPIMG_DIR/"
