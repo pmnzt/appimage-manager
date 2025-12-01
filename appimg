@@ -5,6 +5,9 @@
 # Commands:
 #   appimg ls
 #   appimg move [--all] [-s dir] [file.AppImage]
+# ============================================================
+
+VERSION="0.1"
 #   appimg update
 #   appimg setup-all
 #   appimg reset
@@ -568,7 +571,17 @@ cmd_help() {
     echo "  appimg setup-all [--icon|--icon-skip]"
     echo "  appimg reset"
     echo "  appimg select <appname> [--switch <version>]"
+    echo "  appimg version"
+    echo "  appimg -v"
     echo "  appimg help"
+}
+
+
+# ------------------------------------------------------------
+# Command: appimg version
+# ------------------------------------------------------------
+cmd_version() {
+    echo "appimg version $VERSION"
 }
 
 
@@ -583,7 +596,9 @@ main() {
         setup-all) shift; cmd_setup_all "$@" ;;
         reset)     shift; cmd_reset ;;
         select)    shift; cmd_select "$@" ;;
+        version|-v) shift; cmd_version "$@" ;;
         help)      shift; cmd_help ;;
+        version)   shift; cmd_version ;;
         *)
             cmd_help
             exit 1
