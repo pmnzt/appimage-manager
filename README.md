@@ -23,7 +23,7 @@
 To install `appimg`, simply run the following command:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/pmnzt/appimage-manager/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/pmnzt/appimage-manager/refs/heads/main/install.sh | bash
 ```
 
 This command downloads the `install.sh` script and pipes it directly to `bash` for execution, installing `appimg` to `/usr/local/bin` and setting up its man page and necessary directories.
