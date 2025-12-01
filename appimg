@@ -557,6 +557,22 @@ cmd_select() {
 
 
 # ------------------------------------------------------------
+# Command: appimg help
+# ------------------------------------------------------------
+cmd_help() {
+    echo "AppImage manager"
+    echo "Commands:"
+    echo "  appimg ls [-s dir]"
+    echo "  appimg move [--all] [-s dir] [file.AppImage]"
+    echo "  appimg update [APPNAME] [--icon|--icon-skip]"
+    echo "  appimg setup-all [--icon|--icon-skip]"
+    echo "  appimg reset"
+    echo "  appimg select <appname> [--switch <version>]"
+    echo "  appimg help"
+}
+
+
+# ------------------------------------------------------------
 # Dispatcher
 # ------------------------------------------------------------
 main() {
@@ -567,15 +583,9 @@ main() {
         setup-all) shift; cmd_setup_all "$@" ;;
         reset)     shift; cmd_reset ;;
         select)    shift; cmd_select "$@" ;;
+        help)      shift; cmd_help ;;
         *)
-            echo "AppImage manager"
-            echo "Commands:"
-            echo "  appimg ls [-s dir]"
-            echo "  appimg move [--all] [-s dir] [file.AppImage]"
-            echo "  appimg update [APPNAME] [--icon|--icon-skip]"
-            echo "  appimg setup-all [--icon|--icon-skip]"
-            echo "  appimg reset"
-            echo "  appimg select <appname> [--switch <version>]"
+            cmd_help
             exit 1
             ;;
     esac

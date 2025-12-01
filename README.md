@@ -1,5 +1,9 @@
 # appimg — AppImage Manager
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/810a3034-caae-47d3-b3dd-3e00f018bf26" alt="appimg logo" width="200"/>
+</p>
+
 `appimg` is a lightweight command-line utility for managing AppImage files on Linux. It scans for AppImage files, organizes them into a consistent directory layout, and automatically generates `.desktop` launchers.
 
 ## Features
@@ -10,6 +14,9 @@
 - Generate `.desktop` launchers and symlink them to the user applications directory
 - One-shot full setup with `appimg setup-all`
 - No external dependencies beyond standard GNU/Linux command-line tools
+
+[demo.webm](https://github.com/user-attachments/assets/8d2ce4d9-6e46-4438-afd7-6be0bf8ccfaa)
+
 
 ## Installation
 
@@ -23,158 +30,87 @@ sh install.sh
 
 This installs the `appimg` command on the system.
 
-## Directory layout
+## Man Pages
 
-Managed AppImages are stored under `~/.appimages/` using a per-application directory layout:
-
-```
-~/.appimages/
-    MyApp/
-        MyApp.AppImage
-        icon.png       # optional application icon
-        MyApp.desktop
-    Editor/
-        Editor.AppImage
-        Editor.desktop
-    placeholder-icon.png
-```
-
-Generated `.desktop` launchers are symlinked into:
-
-```
-~/.local/share/applications/
-```
-
-If you want to provide a custom icon for an AppImage, place the icon file (`.png`, `.svg`, `.ico`, etc.) in the same folder as the AppImage and run:
+For detailed information on `appimg` commands, options, and usage, consult the man page:
 
 ```bash
-appimg update
+man appimg
 ```
-
-If no icon is available, the `placeholder-icon.png` file will be used.
 
 ## Commands
 
-Below are the primary `appimg` commands and expected behavior. Notes: file-extension matching is case-insensitive (e.g. `.AppImage`, `.appimage`) and the default search scope is the user's home directory (`$HOME`). The managed directory is `~/.appimages` and the placeholder icon path is `~/.appimages/placeholder-icon.png`.
+Below are the primary `appimg` commands. For a detailed breakdown of all commands, options, and behaviors, please see the `structure.md` file.
 
-1) `appimg ls`
+### `appimg ls`
 
-Usage:
+Lists discovered AppImage files.
 
-```bash
-appimg ls
-appimg ls -s /path/to/search
-```
-
-Description:
-
-- **Purpose:** List discovered AppImage files.
-- **Options:** `-s DIR` — specify a directory to search (default: `$HOME`).
+- **Usage:**
+  ```bash
+  appimg ls
+  appimg ls -s /path/to/search
+  ```
+- **Options:**
+  - `-s DIR`: Specify a directory to search (default: `$HOME`).
 - **Output:** Prints each found AppImage with its full path.
 
-2) `appimg move`
+### `appimg move`
 
-Usage:
+Moves AppImage files into the managed directory (`~/.appimages`).
 
-```bash
-appimg move --all
-appimg move myfile.AppImage
-appimg move -s ~/Downloads --all
-```
+- **Usage:**
+  ```bash
+  appimg move --all
+  appimg move myfile.AppImage
+  appimg move -s ~/Downloads --all
+  ```
+- **Options:**
+  - `-s DIR`: Search directory.
+  - `--all`: Move all found AppImages.
 
-Description:
+### `appimg update`
 
-- **Purpose:** Move AppImage files into the managed directory (`~/.appimages`). Each AppImage is placed inside its own folder.
-- **Options:** `-s DIR` — search directory; `--all` — move all AppImages found in the search scope. If `--all` is omitted you must provide a path to a single AppImage file.
+Generates or updates `.desktop` launchers for AppImages in the managed directory.
+
+- **Usage:**
+  ```bash
+  appimg update [APPNAME] [--icon | --icon-skip]
+  ```
+- **Options:**
+  - `[APPNAME]`: Update a specific app.
+  - `--icon` / `--icon-skip`: Control icon extraction.
+
+### `appimg setup-all`
+
+A convenience command that runs `appimg move --all` followed by `appimg update`.
+
+- **Usage:**
+  ```bash
+  appimg setup-all [--icon | --icon-skip]
+  ```
+
+### `appimg reset`
+
+Resets the managed AppImage state by moving AppImages to a temporary directory and unregistering them.
+
+- **Usage:**
+  ```bash
+  appimg reset
+  ```
+
+### `appimg select`
+
+Manages and switches between multiple versions of an AppImage.
+
+- **Usage:**
+  ```bash
+  appimg select <appname>
+  appimg select <appname> --switch <VERSION>
+  ```
 - **Behavior:**
-    - Create `~/.appimages` if it does not exist.
-    - Do not move files that are already located inside `~/.appimages` into the same location.
-    - Handle `~/.appimages/tmp` specially: avoid moving a file into the same folder and do not treat `tmp` as an ordinary application folder.
-    - File-extension matching is case-insensitive.
-
-3) `appimg update`
-
-Usage:
-
-```bash
-appimg update [APPNAME] [--icon | --icon-skip]
-```
-
-Description:
-
-- **Purpose:** Scan `~/.appimages` and for each app folder containing an AppImage generate or update a `.desktop` launcher, ensure the AppImage is executable, and manage the app icon.
-- **Icon selection precedence:**
-    1. If `icon.*` already exists in the app folder, use it.
- 2. Otherwise, attempt to extract or locate an icon from the AppImage:
-         - Inspect the AppImage's embedded `.desktop` `Icon` key (if present) and try to find a matching icon name in common system icon directories such as `/usr/share/icons` and `/usr/share/pixmaps`.
-         - Prefer SVGs first. If no SVG is found, search for PNGs and prefer the largest PNG by file size. If still not found, look for XPM.
-         - If no direct name match is found in system dirs, fall back to choosing the largest SVG from the extracted contents, then largest PNG, then largest XPM.
- 3. If no icon is found at all:
-         - If `--icon` was provided, attempt automatic icon extraction from the AppImage.
-         - If `--icon-skip` was provided, skip extraction and use the placeholder icon (`~/.appimages/placeholder-icon.png`).
-         - If neither flag is provided, `appimg` may prompt interactively to ask whether to attempt extraction; if the user declines or extraction fails, the placeholder is used.
-- **Additional behavior:**
-    - The chosen icon is copied into the app folder as `icon.*`.
-    - A `.noiconkeep` marker file may be created when needed to indicate the icon should be preserved across resets.
-    - Ensure the AppImage file is executable.
-    - Create or update a `.desktop` file for the app and symlink it into the user's applications directory (typically `~/.local/share/applications`).
-
-4) `appimg setup-all`
-
-Usage:
-
-```bash
-appimg setup-all [--icon | --icon-skip]
-```
-
-Description:
-
-- **Purpose:** Convenience command that runs `appimg move --all` followed by `appimg update` (honoring the same icon flags) to discover, move, and register AppImages in one step.
-
-5) `appimg reset`
-
-Usage:
-
-```bash
-appimg reset
-```
-
-Description:
-
-- **Purpose:** Reset the managed AppImage state by moving AppImages into a temporary area, removing application folders, and undoing registration.
-- **Behavior:**
-    - Move all AppImage files from their per-app folders in `~/.appimages` into `~/.appimages/tmp/`.
-    - When moving, also move any icon files that belong to an AppImage and rename them using the pattern `<appname>-icon.*` so they can be detected later by `appimg update`.
-    - After moving files to `~/.appimages/tmp`, delete the now-empty app folders.
-    - Mark the moved AppImage files as non-executable.
-    - Remove any `.desktop` symlinks that were created in the user's applications directory.
-    - `appimg update` is able to detect icons stored in `~/.appimages/tmp` (using the `<appname>-icon.*` pattern), rename them back to `icon.*`, and move them to the restored app folder when re-registering.
-
-After resetting, re-register AppImages with:
-
-```bash
-appimg setup-all
-```
-
-6) `appimg select`
-
-Usage:
-
-```bash
-appimg select <appname>
-appimg select <appname> --switch <VERSION>
-```
-
-Description:
-
-- **Purpose:** Manage and switch between multiple versions of an AppImage for a given application.
-- `appimg select <appname>`: Lists available versions for `<appname>` and shows the active one.
-- `appimg select <appname> --switch <VERSION>`: Switches the active version.
-- **Details:**
-    - `appimg move` handles versioning by adding a `#version-string` to AppImage filenames when duplicates are found (e.g., `my-app#1.AppImage`, `my-app#2.AppImage`).
-    - All versions are kept in the same directory (e.g., `~/.appimages/my-app/`).
-    - A `my-app.AppImage` symlink points to the active version.
-    - Switching versions updates this symlink and runs `appimg update` to refresh the `.desktop` file.
+  - `appimg select <appname>`: Lists available versions.
+  - `appimg select <appname> --switch <VERSION>`: Switches the active version.
 
 ## Example workflow
 

@@ -29,6 +29,13 @@ else
     exit 1
 fi
 
+# Install man page
+MAN_PATH="/usr/local/share/man/man1"
+echo "Installing man page to $MAN_PATH"
+sudo mkdir -p "$MAN_PATH"
+sudo cp -f "man/man1/appimg.1" "$MAN_PATH/appimg.1"
+sudo gzip -f "$MAN_PATH/appimg.1"
+
 # ------------------------------------------------------------
 # Ensure ~/.appimages exists
 # ------------------------------------------------------------
@@ -37,11 +44,11 @@ mkdir -p "$APPIMG_DIR"
 echo "Ensured directory exists: $APPIMG_DIR"
 
 # Move placeholder-icon.png into ~/.appimages
-if [ -f "placeholder-icon.png" ]; then
+if [ -f "assets/icons/placeholder-icon.png" ]; then
     echo "Moving placeholder-icon.png → $APPIMG_DIR/"
-    cp "placeholder-icon.png" "$APPIMG_DIR/"
+    cp "assets/icons/placeholder-icon.png" "$APPIMG_DIR/"
 else
-    echo "Warning: placeholder-icon.png not found in current directory."
+    echo "Warning: placeholder-icon.png not found in assets/icons/."
 fi
 
 echo "Installation and setup complete!"

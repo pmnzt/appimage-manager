@@ -1,3 +1,33 @@
+# Directory layout
+
+Managed AppImages are stored under `~/.appimages/` using a per-application directory layout:
+
+```
+~/.appimages/
+    MyApp/
+        MyApp.AppImage
+        icon.png       # optional application icon
+        MyApp.desktop
+    Editor/
+        Editor.AppImage
+        Editor.desktop
+    placeholder-icon.png
+```
+
+Generated `.desktop` launchers are symlinked into:
+
+```
+~/.local/share/applications/
+```
+
+If you want to provide a custom icon for an AppImage, place the icon file (`.png`, `.svg`, `.ico`, etc.) in the same folder as the AppImage and run:
+
+```bash
+appimg update
+```
+
+If no icon is available, the `placeholder-icon.png` file will be used.
+
 # Commands
 
 This document describes the CLI commands and expected behavior for managing AppImage files.
