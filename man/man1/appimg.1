@@ -126,10 +126,10 @@ All versions of a single application are stored within the same dedicated subfol
 \fBActive Version Symlink\fR
 A symlink, named after the application without a version suffix (e.g., \fB~/.appimages/krita/krita.AppImage\fR), points to the currently active version. This symlink is the target for .desktop file entries and system integration.
 .TP
-\fBappimg select <appname>R
+\fBappimg select <appname>
 Lists all available versioned AppImages (e.g., krita#1.AppImage, krita#3.AppImage) found in the application\'s folder and indicates which version the active symlink currently points to.
 .TP
-\fBappimg select <appname> \-\-switch <VERSION>R
+\fBappimg select <appname> \-\-switch <VERSION>
 Modifies the active symlink (e.g., \fB~/.appimages/krita/krita.AppImage\fR) to point to the AppImage file corresponding to <VERSION>. Subsequently, \fBappimg update <appname>\fR is automatically run to re\-generate the .desktop file and ensure system integration reflects the new active version.
 .TP
 \fBInteractions with other commands\fR
