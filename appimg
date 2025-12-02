@@ -15,7 +15,7 @@
 
 VERSION="0.1.1"
 APPIMG_DIR="$HOME/.appimages"
-DESKTOP_TARGET="$HOME/.local/share/applications"
+DESKTOP_TARGET="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 
 # Ensure ~/.local/share/applications exists
 mkdir -p "$DESKTOP_TARGET"
