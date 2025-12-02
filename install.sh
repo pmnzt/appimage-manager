@@ -50,7 +50,16 @@ MAN_PATH="/usr/local/share/man/man1"
 # Download and install man page
 echo "Downloading man page..."
 mkdir -p "$TMP_DIR/man/man1"
-curl -sSL "$REPO_BASE_URL/appimg.1" -o "$TMP_DIR/man/man1/appimg.1"
+if ! curl -f -sSL "$REPO_BASE_URL/appimg.1" -o "$TMP_DIR/man/man1/appimg.1"; then
+    echo "Error: Failed to download man page or man page not found (404)." >&2
+    exit 1
+fi
+
+# Verify if the downloaded file is not empty
+if [ ! -s "$TMP_DIR/man/man1/appimg.1" ]; then
+    echo "Error: Downloaded man page is empty or invalid." >&2
+    exit 1
+fi
 sudo mkdir -p "$MAN_PATH"
 sudo cp -f "$TMP_DIR/man/man1/appimg.1" "$MAN_PATH/appimg.1"
 sudo gzip -f "$MAN_PATH/appimg.1"
