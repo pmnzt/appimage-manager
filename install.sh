@@ -13,14 +13,26 @@ if [ -z "$RELEASE_TAG" ]; then
     exit 1
 fi
 
-REPO_BASE_URL="https://github.com/pmnzt/appimage-manager/releases/download/$RELEASE_TAG"
+REPO_BASE_URL="https://github.com/pmnzt/appimage-manager/archive/$RELEASE_TAG.tar.gz"
 TMP_DIR=$(mktemp -d)
+EXTRACT_DIR="$TMP_DIR/appimage-manager-${RELEASE_TAG#v}"
 
 echo "Installing $APP_NAME ..."
 
-# Download appimg script
-echo "Downloading $APP_NAME script..."
-curl -sSL "$REPO_BASE_URL/appimg" -o "$TMP_DIR/$APP_NAME"
+# Download and extract source code
+echo "Downloading and extracting $APP_NAME source code..."
+curl -sSL "$REPO_BASE_URL" -o "$TMP_DIR/source.tar.gz"
+tar -xzf "$TMP_DIR/source.tar.gz" -C "$TMP_DIR"
+
+# Check if extraction was successful
+if [ ! -d "$EXTRACT_DIR" ]; then
+    echo "Error: Failed to extract $APP_NAME source code."
+    exit 1
+fi
+
+# Copy appimg script
+echo "Copying $APP_NAME script..."
+cp "$EXTRACT_DIR/appimg" "$TMP_DIR/$APP_NAME"
 chmod +x "$TMP_DIR/$APP_NAME"
 
 # Check if download was successful
@@ -50,10 +62,7 @@ MAN_PATH="/usr/local/share/man/man1"
 # Download and install man page
 echo "Downloading man page..."
 mkdir -p "$TMP_DIR/man/man1"
-if ! curl -f -sSL "$REPO_BASE_URL/appimg.1" -o "$TMP_DIR/man/man1/appimg.1"; then
-    echo "Error: Failed to download man page or man page not found (404)." >&2
-    exit 1
-fi
+cp -f "$EXTRACT_DIR/man/man1/appimg.1" "$TMP_DIR/man/man1/appimg.1"
 
 # Verify if the downloaded file is not empty
 if [ ! -s "$TMP_DIR/man/man1/appimg.1" ]; then
@@ -75,7 +84,7 @@ echo "Ensured directory exists: $APPIMG_DIR"
 # Download and move placeholder-icon.png into ~/.appimages
 echo "Downloading placeholder-icon.png..."
 mkdir -p "$TMP_DIR/assets/icons"
-curl -sSL "$REPO_BASE_URL/placeholder-icon.png" -o "$TMP_DIR/assets/icons/placeholder-icon.png"
+cp "$EXTRACT_DIR/assets/icons/placeholder-icon.png" "$TMP_DIR/assets/icons/placeholder-icon.png"
 if [ -f "$TMP_DIR/assets/icons/placeholder-icon.png" ]; then
     echo "Moving placeholder-icon.png → $APPIMG_DIR/"
     cp "$TMP_DIR/assets/icons/placeholder-icon.png" "$APPIMG_DIR/"
