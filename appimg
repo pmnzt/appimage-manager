@@ -81,10 +81,32 @@ cmd_move() {
 
         local tmpdir
         tmpdir=$(mktemp -d)
-        (cd "$tmpdir" && "$f" --appimage-extract >/dev/null 2>&1) || true
+        chmod +x "$f"
+        (cd "$tmpdir" && "$f" --appimage-extract '*.desktop') >/dev/null 2>&1 || true
 
         local desktop_file
-        desktop_file=$(find "$tmpdir/squashfs-root" -type f -iname "*.desktop" | head -n 1)
+        
+        # Check if squashfs-root was created and contains the desktop file
+        if [[ ! -d "$tmpdir/squashfs-root" ]]; then
+            # If not, try a full extract as a fallback
+            (cd "$tmpdir" && "$f" --appimage-extract) >/dev/null 2>&1 || true
+        fi
+        
+        if [[ ! -d "$tmpdir/squashfs-root" ]]; then
+            echo "Warning: Failed to extract squashfs-root for $f. Skipping."
+            rm -rf "$tmpdir"
+            return
+        fi
+
+        local all_desktop_files
+        all_desktop_files=$(ls -1 "$tmpdir/squashfs-root" | grep ".desktop$")
+        
+        local desktop_file
+        desktop_file=$(echo "$all_desktop_files" | grep -v "url-handler.desktop" | head -n 1)
+
+        if [[ -z "$desktop_file" ]]; then
+            desktop_file=$(echo "$all_desktop_files" | head -n 1)
+        fi
 
         if [[ -z "$desktop_file" ]]; then
             echo "Warning: No .desktop file found in $f. Skipping."
@@ -177,14 +199,32 @@ cmd_update() {
         local categories_from_desktop=""
 
         tmpdir=$(mktemp -d)
-        (cd "$tmpdir" && "$appimage" --appimage-extract >/dev/null 2>&1) || true
+        (cd "$tmpdir" && "$appimage" --appimage-extract '*.desktop') >/dev/null 2>&1 || true
+
+        if [[ ! -d "$tmpdir/squashfs-root" ]]; then
+            (cd "$tmpdir" && "$appimage" --appimage-extract) >/dev/null 2>&1 || true
+        fi
+
+        if [[ ! -d "$tmpdir/squashfs-root" ]]; then
+            echo "Warning: Failed to extract squashfs-root for $appimage. Skipping update for this AppImage."
+            rm -rf "$tmpdir"
+            continue
+        fi
 
         local icon_name=""
         local desktop_name=""
 
         if [[ -d "$tmpdir/squashfs-root" ]]; then
+            local all_desktop_files
+            all_desktop_files=$(ls -1 "$tmpdir/squashfs-root" | grep ".desktop$")
+            
             local embedded_desktop
-            embedded_desktop=$(find "$tmpdir/squashfs-root" -type f -iname "*.desktop" | head -n 1)
+            embedded_desktop=$(echo "$all_desktop_files" | grep -v "url-handler.desktop" | head -n 1)
+
+            if [[ -z "$embedded_desktop" ]]; then
+                embedded_desktop=$(echo "$all_desktop_files" | head -n 1)
+            fi
+
             if [[ -n "$embedded_desktop" ]]; then
                 icon_name=$(grep -Ei '^Icon=' "$embedded_desktop" | head -n1 | sed -E 's/Icon=//I') || true
                 icon_name="${icon_name%%$'\r'}"
