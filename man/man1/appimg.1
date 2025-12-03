@@ -1,4 +1,4 @@
-.TH "appimg" 1 "December 2025" "0.1.3" "appimg man page"
+.TH "appimg" 1 "December 2025" "0.2.0" "appimg man page"
 .SH NAME
 appimg - manage AppImages
 .SH SYNOPSIS
@@ -52,30 +52,28 @@ Scan ~/.appimages, and for each folder containing an AppImage generate a .deskto
 .RS
 .PP
 \fBUSAGE:\fR
-.B appimg update [APPNAME] [--icon|--icon-skip]
+.B appimg update [APPNAME] [--fast]
 .PP
 \fBOPTIONS:\fR
 .TP
 \fB[APPNAME]\fR
 Update a specific app.
 .TP
-\fB--icon\fR / \fB--icon-skip\fR
-Control icon extraction.
+\fB--fast\fR
+Skip icon and .desktop file extraction.
 .PP
 \fBBEHAVIOR:\fR
 For each folder in ~/.appimages that contains an AppImage:
 Generate or update the .desktop file for the application.
-Determine the icon using the following precedence:
+If --fast is provided, skip extraction and use existing icons or a placeholder.
+Otherwise, determine the icon using the following precedence:
 1. If icon.* already exists in the folder, use it.
 2. Otherwise, extract the AppImage and inspect its embedded .desktop Icon key; then try to find a matching icon:
 Search common icon directories (e.g. /usr/share/icons, /usr/share/pixmaps) for an SVG matching the name.
 If no matching SVG, search for a matching PNG and prefer the largest PNG file by file size.
 If still not found, search for a matching XPM.
 If no direct match is found, fall back to the largest SVG, then largest PNG, then largest XPM from the extracted contents.
-3. If no icon is found at all:
-If --icon was provided, automatically attempt to extract icons from the AppImage.
-If --icon-skip was provided, do not attempt extraction and use ~/.appimages/placeholder-icon.png.
-If neither option is provided, ask the user if they would like to extract icons from the AppImage. If the user declines or no icon can be extracted, use ~/.appimages/placeholder-icon.png.
+3. If no icon is found at all, use ~/.appimages/placeholder-icon.png.
 Copy the chosen icon into the app's folder as icon.*.
 Create a .noiconkeep marker if needed to prevent icon copying on reset.
 Ensure the AppImage file is executable.
@@ -88,7 +86,7 @@ Convenience command that runs appimg move and appimg update with their default o
 .RS
 .PP
 \fBUSAGE:\fR
-.B appimg setup-all [--icon|--icon-skip]
+.B appimg setup-all [--fast]
 .RE
 .TP
 \fBreset\fR

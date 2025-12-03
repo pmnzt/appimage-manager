@@ -13,7 +13,7 @@
 #   appimg help
 # ============================================================
 
-VERSION="0.1.3"
+VERSION="0.2.0"
 APPIMG_DIR="$HOME/.appimages"
 DESKTOP_TARGET="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 
@@ -175,15 +175,13 @@ cmd_move() {
 # Command: appimg update
 # ------------------------------------------------------------
 cmd_update() {
-    local extract_icons=0
-    local skip_extract=0
+    local fast_mode=0
     local target_app_name=""
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --icon) extract_icons=1; shift ;;
-            --icon-skip) skip_extract=1; shift ;;
+            --fast) fast_mode=1; shift ;;
             -*) die "Unknown option for update: $1" ;;
             *)
                 if [[ -n "$target_app_name" ]]; then
@@ -194,10 +192,6 @@ cmd_update() {
                 ;;
         esac
     done
-
-    if [[ $extract_icons -eq 1 && $skip_extract -eq 1 ]]; then
-        die "Cannot specify both --icon and --icon-skip."
-    fi
 
     [[ ! -d "$APPIMG_DIR" ]] && die "$APPIMG_DIR does not exist."
 
@@ -238,45 +232,40 @@ cmd_update() {
         local desktop_file="$dir/$app_name_for_desktop.desktop"
 
 
-        # Always attempt to extract icons since we need the embedded .desktop file info
-        tmpdir=$(mktemp -d)
-        (cd "$tmpdir" && "$executable_appimage" --appimage-extract >/dev/null 2>&1) || true
-
         local name_from_desktop_file=""
-        local icon_name=""
-        local desktop_name=""
+        local icon=""
         local terminal_from_desktop=""
         local categories_from_desktop=""
 
-        if [[ -d "$tmpdir/squashfs-root" ]]; then
-            # Try to pick the correct icon by reading the embedded .desktop file's Icon key
-            desktop_inside=$(find "$tmpdir/squashfs-root" -type f -iname "*.desktop" | head -n 1)
-            if [[ -n "$desktop_inside" ]]; then
-                icon_name=$(grep -Ei '^Icon=' "$desktop_inside" | head -n1 | sed -E 's/Icon=//I') || true
-                icon_name="${icon_name%%$'\r'}"
+        if [[ $fast_mode -eq 0 ]]; then
+            # Always attempt to extract icons since we need the embedded .desktop file info
+            tmpdir=$(mktemp -d)
+            (cd "$tmpdir" && "$executable_appimage" --appimage-extract >/dev/null 2>&1) || true
 
-                desktop_name=$(grep -Ei '^Name=' "$desktop_inside" | head -n1 | sed -E 's/Name=//I') || true
-                desktop_name="${desktop_name%%$'\r'}"
-                if [[ -n "$desktop_name" ]]; then
-                    name_from_desktop_file="$desktop_name"
+            local icon_name=""
+            local desktop_name=""
+
+            if [[ -d "$tmpdir/squashfs-root" ]]; then
+                # Try to pick the correct icon by reading the embedded .desktop file's Icon key
+                desktop_inside=$(find "$tmpdir/squashfs-root" -type f -iname "*.desktop" | head -n 1)
+                if [[ -n "$desktop_inside" ]]; then
+                    icon_name=$(grep -Ei '^Icon=' "$desktop_inside" | head -n1 | sed -E 's/Icon=//I') || true
+                    icon_name="${icon_name%%$'\r'}"
+
+                    desktop_name=$(grep -Ei '^Name=' "$desktop_inside" | head -n1 | sed -E 's/Name=//I') || true
+                    desktop_name="${desktop_name%%$'\r'}"
+                    if [[ -n "$desktop_name" ]]; then
+                        name_from_desktop_file="$desktop_name"
+                    fi
+
+                    terminal_from_desktop=$(grep -Ei '^Terminal=' "$desktop_inside" | head -n1 | sed -E 's/Terminal=//I') || true
+                    terminal_from_desktop="${terminal_from_desktop%%$'\r'}"
+                    categories_from_desktop=$(grep -Ei '^Categories=' "$desktop_inside" | head -n1 | sed -E 's/Categories=//I') || true
+                    categories_from_desktop="${categories_from_desktop%%$'\r'}"
                 fi
 
-                terminal_from_desktop=$(grep -Ei '^Terminal=' "$desktop_inside" | head -n1 | sed -E 's/Terminal=//I') || true
-                terminal_from_desktop="${terminal_from_desktop%%$'\r'}"
-                categories_from_desktop=$(grep -Ei '^Categories=' "$desktop_inside" | head -n1 | sed -E 's/Categories=//I') || true
-                categories_from_desktop="${categories_from_desktop%%$'\r'}"
-            fi
-
-            icon=$(find "$dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
-            if [[ -z "$icon" ]]; then
-                if [[ $extract_icons -eq 1 ]]; then
-                    extract_icon="y"
-                elif [[ $skip_extract -eq 1 ]]; then
-                    extract_icon="n"
-                else
-                    read -p "No icon found for $app_name_for_desktop. Would you like to try extracting icons from the AppImage? [y/N]: " extract_icon
-                fi
-                if [[ "$extract_icon" =~ ^[Yy]$ ]]; then
+                icon=$(find "$dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
+                if [[ -z "$icon" ]]; then
 
                     # Search for SVG first in common icon directories
                     icon_candidate=""
@@ -356,17 +345,18 @@ cmd_update() {
                         icon="$dir/icon.$ext"
                         # Create .noiconkeep marker file
                         touch "$dir/.noiconkeep"
-                    else
-                        icon="$APPIMG_DIR/placeholder-icon.png"
                     fi
-                else # User chose not to extract icons
-                    icon="$APPIMG_DIR/placeholder-icon.png"
                 fi
             fi
-        else # squashfs-root not found, extraction failed or not an AppImage
+            rm -rf "$tmpdir"
+        fi
+
+        if [[ -z "$icon" ]]; then
+            icon=$(find "$dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
+        fi
+        if [[ -z "$icon" ]]; then
             icon="$APPIMG_DIR/placeholder-icon.png"
         fi
-        rm -rf "$tmpdir"
 
         # Use name from .desktop file if available, otherwise fallback to directory name
         local app_name_for_desktop_entry="${name_from_desktop_file:-$app_name_for_desktop}"
@@ -398,25 +388,17 @@ EOF
 # Command: appimg setup-all
 # ------------------------------------------------------------
 cmd_setup_all() {
-    local extract_icons=0
-    local skip_extract=0
+    local fast_mode=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --icon) extract_icons=1; shift ;;
-            --icon-skip) skip_extract=1; shift ;;
+            --fast) fast_mode=1; shift ;;
             *) shift ;;
         esac
     done
 
-    if [[ $extract_icons -eq 1 && $skip_extract -eq 1 ]]; then
-        die "Cannot specify both --icon and --icon-skip."
-    fi
-
     cmd_move --all
-    if [[ $extract_icons -eq 1 ]]; then
-        cmd_update --icon
-    elif [[ $skip_extract -eq 1 ]]; then
-        cmd_update --icon-skip
+    if [[ $fast_mode -eq 1 ]]; then
+        cmd_update --fast
     else
         cmd_update
     fi
@@ -596,8 +578,8 @@ cmd_help() {
     echo "Commands:"
     echo "  appimg ls [-s dir]"
     echo "  appimg move [--all] [-s dir] [file.AppImage]"
-    echo "  appimg update [APPNAME] [--icon|--icon-skip]"
-    echo "  appimg setup-all [--icon|--icon-skip]"
+    echo "  appimg update [APPNAME] [--fast]"
+    echo "  appimg setup-all [--fast]"
     echo "  appimg reset"
     echo "  appimg select <appname> [--switch <version>]"
     echo "  appimg version"
