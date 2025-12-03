@@ -80,11 +80,10 @@ Generates or updates `.desktop` launchers for AppImages in the managed directory
 
 - **Usage:**
   ```bash
-  appimg update [APPNAME] [--fast]
+  appimg update [APPNAME]
   ```
 - **Options:**
   - `[APPNAME]`: Update a specific app.
-  - `--fast`: Skip icon and `.desktop` file extraction.
 
 ### `appimg setup-all`
 
@@ -92,7 +91,7 @@ A convenience command that runs `appimg move --all` followed by `appimg update`.
 
 - **Usage:**
   ```bash
-  appimg setup-all [--fast]
+  appimg setup-all
   ```
 
 ### `appimg reset`

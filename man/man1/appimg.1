@@ -52,21 +52,17 @@ Scan ~/.appimages, and for each folder containing an AppImage generate a .deskto
 .RS
 .PP
 \fBUSAGE:\fR
-.B appimg update [APPNAME] [--fast]
+.B appimg update [APPNAME]
 .PP
 \fBOPTIONS:\fR
 .TP
 \fB[APPNAME]\fR
 Update a specific app.
-.TP
-\fB--fast\fR
-Skip icon and .desktop file extraction.
 .PP
 \fBBEHAVIOR:\fR
 For each folder in ~/.appimages that contains an AppImage:
 Generate or update the .desktop file for the application.
-If --fast is provided, skip extraction and use existing icons or a placeholder.
-Otherwise, determine the icon using the following precedence:
+Determine the icon using the following precedence:
 1. If icon.* already exists in the folder, use it.
 2. Otherwise, extract the AppImage and inspect its embedded .desktop Icon key; then try to find a matching icon:
 Search common icon directories (e.g. /usr/share/icons, /usr/share/pixmaps) for an SVG matching the name.
@@ -86,7 +82,7 @@ Convenience command that runs appimg move and appimg update with their default o
 .RS
 .PP
 \fBUSAGE:\fR
-.B appimg setup-all [--fast]
+.B appimg setup-all
 .RE
 .TP
 \fBreset\fR
