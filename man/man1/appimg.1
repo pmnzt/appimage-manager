@@ -23,8 +23,10 @@ Specify a directory to search for AppImages.
 Move all AppImages found in the search scope.
 .PP
 \fBBEHAVIOR:\fR
-If ~/.appimages does not exist, create it.
-For each AppImage found, create a folder for that AppImage inside ~/.appimages and move the file there.
+For each AppImage, extract its embedded .desktop file to determine the application's ID.
+Create a folder named after the ID inside ~/.appimages and move the AppImage there.
+The AppImage should be renamed to match the folder name (e.g., ~/.appimages/com.appname.App/com.appname.App.AppImage).
+This process overwrites any existing AppImage, meaning there is only one version of each application at a time.
 Do not attempt to move files that are already inside ~/.appimages into the same location.
 Do handle ~/.appimages/tmp specially (it may contain reset files) — do not skip it when appropriate, but avoid moving from a folder into itself.
 If --all is omitted, the user must provide the AppImage path: appimg move ~/Downloads/myapp.AppImage.
@@ -101,41 +103,6 @@ Remove any symlinks created in the system applications directory.
 appimg update should be able to detect icons in ~/.appimages/tmp (using the <appname>-icon.* pattern), rename them to icon.* and move them back to the appropriate folders when restoring.
 .RE
 .TP
-\fBselect\fR
-Manage and switch between multiple versions of an AppImage for a given application name.
-.RS
-.PP
-\fBUSAGE:\fR
-.B appimg select <appname>
-.br
-.B appimg select <appname> \-\-switch <VERSION>
-.PP
-\fBBEHAVIOR:\fR
-.TP
-\fBVersion Naming Convention\fR
-When \fBappimg move\fR processes AppImages, if multiple versions of the same application (basically when there\'s more than one appimage of the same name) are detected, it appends a unique #version\-string suffix to the filename (e.g., krita#1.AppImage, krita#2.AppImage). The # character denotes the start of the version string for identification purposes across commands.
-.TP
-\fBStorage Location\fR
-All versions of a single application are stored within the same dedicated subfolder under \fB~/.appimages\fR (e.g., \fB~/.appimages/krita/krita#1.AppImage\fR).
-.TP
-\fBActive Version Symlink\fR
-A symlink, named after the application without a version suffix (e.g., \fB~/.appimages/krita/krita.AppImage\fR), points to the currently active version. This symlink is the target for .desktop file entries and system integration.
-.TP
-\fBappimg select <appname>
-Lists all available versioned AppImages (e.g., krita#1.AppImage, krita#3.AppImage) found in the application\'s folder and indicates which version the active symlink currently points to.
-.TP
-\fBappimg select <appname> \-\-switch <VERSION>
-Modifies the active symlink (e.g., \fB~/.appimages/krita/krita.AppImage\fR) to point to the AppImage file corresponding to <VERSION>. Subsequently, \fBappimg update <appname>\fR is automatically run to re\-generate the .desktop file and ensure system integration reflects the new active version.
-.TP
-\fBInteractions with other commands\fR
-.RS
-.PP
-\fBappimg move\fR: Recognizes the # character as a version separator and ensures multiple versions of an application are grouped within the same folder.
-.PP
-\fBappimg reset\fR: Removes the active version symlink (e.g., krita.AppImage) when moving AppImages to \fB~/.appimages/tmp\fR. The version string (e.g., #1) is preserved in the AppImage filename during this move.
-.RE
-.RE
-.TP
 \fBversion\fR, \fB-v\fR
 Print the appimg version.
 .RS
@@ -146,6 +113,7 @@ Print the appimg version.
 .B appimg -v
 .RE
 .SH AUTHOR
-pmnzt
-.SH REPORTING BUGS
-<https://github.com/pmnzt/appimage-manager/issues>
+.TP
+.B "pmnzt"
+.TP
+.I "https://github.com/pmnzt"

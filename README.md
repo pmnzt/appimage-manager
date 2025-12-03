@@ -103,19 +103,6 @@ Resets the managed AppImage state by moving AppImages to a temporary directory a
   appimg reset
   ```
 
-### `appimg select`
-
-Manages and switches between multiple versions of an AppImage.
-
-- **Usage:**
-  ```bash
-  appimg select <appname>
-  appimg select <appname> --switch <VERSION>
-  ```
-- **Behavior:**
-  - `appimg select <appname>`: Lists available versions.
-  - `appimg select <appname> --switch <VERSION>`: Switches the active version.
-
 ## Example workflow
 
 ```bash
