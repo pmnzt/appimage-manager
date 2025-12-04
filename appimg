@@ -12,7 +12,7 @@
 #   appimg help
 # ============================================================
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 APPIMG_DIR="$HOME/.appimages"
 DESKTOP_TARGET="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 
