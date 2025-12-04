@@ -8,12 +8,11 @@
 #   appimg update
 #   appimg setup-all
 #   appimg reset
-#   appimg select <appname> [--switch <version>]
 #   appimg version
 #   appimg help
 # ============================================================
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 APPIMG_DIR="$HOME/.appimages"
 DESKTOP_TARGET="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 
@@ -31,11 +30,56 @@ die() {
 
 find_appimages() {
     local search_dir="$1"
+    find "$search_dir" -type f -iname "*.AppImage" -not -path "$APPIMG_DIR/managed/*" 2>/dev/null
+}
+
+find_all_appimages() {
+    local search_dir="$1"
     find "$search_dir" -type f -iname "*.AppImage" 2>/dev/null
 }
 
 appname_from_path() {
-    basename "$1" | sed -E 's/\.AppImage$//i'
+    basename "$1" | sed -E 's/(\.AppImage$|#active)//i'
+}
+
+# New helper function
+get_appimage_metadata() {
+    local f="$1"
+    local desktop_id=""
+    local has_active=0
+
+    if echo "$(basename "$f")" | grep -q '#active'; then
+        has_active=1
+    fi
+
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    chmod +x "$f"
+    (cd "$tmpdir" && "$f" --appimage-extract '*.desktop') >/dev/null 2>&1 || true
+
+    if [[ ! -d "$tmpdir/squashfs-root" ]]; then
+        (cd "$tmpdir" && "$f" --appimage-extract) >/dev/null 2>&1 || true
+    fi
+
+    if [[ -d "$tmpdir/squashfs-root" ]]; then
+        local all_desktop_files
+        all_desktop_files=$(ls -1 "$tmpdir/squashfs-root" | grep ".desktop$")
+            
+        local desktop_file
+        desktop_file=$(echo "$all_desktop_files" | grep -v "url-handler.desktop" | head -n 1)
+
+        if [[ -z "$desktop_file" ]]; then
+            desktop_file=$(echo "$all_desktop_files" | head -n 1)
+        fi
+
+        if [[ -n "$desktop_file" ]]; then
+            desktop_id=$(basename "$desktop_file" .desktop)
+        fi
+    fi
+    rm -rf "$tmpdir"
+
+    echo "$desktop_id|$has_active"
 }
 
 
@@ -51,9 +95,16 @@ cmd_ls() {
         esac
     done
 
-    find_appimages "$search"
-}
+    mapfile -t files < <(find_all_appimages "$search")
 
+    for f in "${files[@]}"; do
+        if [[ "$(readlink -f "$f")" == "$APPIMG_DIR/managed/"* ]]; then
+            echo "$f (managed)"
+        else
+            echo "$f"
+        fi
+    done
+}
 
 # ------------------------------------------------------------
 # Command: appimg move
@@ -62,126 +113,230 @@ cmd_move() {
     local search="$HOME"
     local do_all=0
     local specific_file=""
-
+    local target_dir=""
+    local args=()
+    
+    # Capture all arguments after options
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -s) search="$2"; shift 2 ;;
             --all) do_all=1; shift ;;
-            *) specific_file="$1"; shift ;;
+            *) args+=("$1"); shift ;;
         esac
     done
 
-    mkdir -p "$APPIMG_DIR"
+    # Determine file and target_dir from remaining arguments
+    if [[ "${#args[@]}" -eq 1 ]]; then
+        if [[ "$do_all" -eq 1 ]]; then
+            target_dir="${args[0]}"
+        else
+            specific_file="${args[0]}"
+        fi
+    elif [[ "${#args[@]}" -eq 2 ]]; then
+        if [[ "$do_all" -eq 1 ]]; then
+            die "move --all takes at most one directory argument."
+        fi
+        specific_file="${args[0]}"
+        target_dir="${args[1]}"
+    elif [[ "${#args[@]}" -gt 2 ]]; then
+        die "Too many arguments for move."
+    fi
 
-    # Function to get base name (without .AppImage or .appimage)
-    get_base_name() {
-        local file="$1"
-        local fname
-        fname=$(basename "$file")
-        fname=$(echo "$fname" | sed -E 's/\.AppImage$//i')
-        echo "${fname%%#*}"
-    }
-
-    # Function to move icons from tmp associated with a given app
-    move_tmp_icons() {
-        local app_name="$1"
-        local dest="$APPIMG_DIR/$app_name"
-        shopt -s nullglob
-        for icon in "$APPIMG_DIR/tmp/$app_name-icon."*; do
-            [[ -f "$icon" ]] || continue
-            ext="${icon##*.}"
-            echo "Moving icon $(basename "$icon") → $dest/icon.$ext"
-            mv "$icon" "$dest/icon.$ext"
-        done
-        shopt -u nullglob
-    }
-
-    move_one_file() {
-        local f="$1"
-        # Skip all files inside ~/.appimages except tmp/
-        if [[ "$f" == "$APPIMG_DIR"* && "$f" != "$APPIMG_DIR/tmp"* ]]; then
-            echo "Skipping (already managed): $f"
-            return
+    # Path 1: A target directory is specified. Move files and exit.
+    if [[ -n "$target_dir" ]]; then
+        if [[ ! -d "$target_dir" ]]; then
+            echo "Creating directory: $target_dir"
+            mkdir -p "$target_dir" || die "Could not create directory $target_dir"
         fi
 
-        local filename
-        filename=$(basename "$f")
-        local name
-        name=$(get_base_name "$f")
-        local dest="$APPIMG_DIR/$name"
-        mkdir -p "$dest"
-
-        shopt -s nullglob
-        local versions=("$dest/$name"#*.AppImage)
-        shopt -u nullglob
-
-        # If no versioned files exist, check for a single non-versioned AppImage and version it
-        if [[ ${#versions[@]} -eq 0 && -f "$dest/$name.AppImage" && ! -L "$dest/$name.AppImage" ]]; then
-            echo "Found existing unversioned AppImage for $name. Converting to version #1."
-            mv "$dest/$name.AppImage" "$dest/$name#1.AppImage"
-            (cd "$dest" && ln -sf "$name#1.AppImage" "$name.AppImage")
-            versions=("$dest/$name#1.AppImage") # update versions array
+        if [[ "$do_all" -eq 1 ]]; then
+            mapfile -t files_to_move < <(find_appimages "$search")
+            if [[ ${#files_to_move[@]} -eq 0 ]]; then
+                echo "No unmanaged AppImages found in '$search' to move."
+                return
+            fi
+            for f in "${files_to_move[@]}"; do
+                echo "Moving $f → $target_dir/"
+                mv "$f" "$target_dir/" || die "Failed to move $f"
+            done
+        else # specific file
+            if [[ -z "$specific_file" ]]; then
+                die "You must provide a file to move."
+            fi
+            if [[ ! -f "$specific_file" ]]; then
+                die "File not found: $specific_file"
+            fi
+            # Check if it's in the managed directory
+            local full_path
+            full_path=$(readlink -f "$specific_file")
+            if [[ "$full_path" == "$APPIMG_DIR/managed/"* ]]; then
+                 echo "Skipping move: $specific_file is already managed."
+                 return
+            fi
+            echo "Moving $specific_file → $target_dir/"
+            mv "$specific_file" "$target_dir/" || die "Failed to move $specific_file"
         fi
+        return # We are done.
+    fi
 
-        local next_version_num=$((${#versions[@]} + 1))
-        local new_versioned_filename="$dest/$name#$next_version_num.AppImage"
+    # Path 2: No target directory. Use the management logic.
+    if [[ "$do_all" -eq 0 && -z "$specific_file" ]]; then
+        die "You must provide a file or use --all"
+    fi
 
-        echo "Moving $f → $new_versioned_filename"
-        mv "$f" "$new_versioned_filename" || die "Failed to move $f"
+    mkdir -p "$APPIMG_DIR/managed"
+    mkdir -p "$APPIMG_DIR/unmanaged"
 
-        local symlink="$dest/$name.AppImage"
-        # If no active version symlink exists, create one for the new file
-        if [[ ! -e "$symlink" ]]; then
-            echo "Setting $(basename "$new_versioned_filename") as active version."
-            (cd "$dest" && ln -sf "$(basename "$new_versioned_filename")" "$(basename "$symlink")")
-        fi
+    declare -a all_appimages_info # To store path|desktop_id|has_active for all found AppImages
 
-        # Move associated icons from tmp if they exist
-        if [[ "$f" == "$APPIMG_DIR/tmp"* ]]; then
-            move_tmp_icons "$name"
-        fi
-    }
-
-    # Move ALL AppImages
     if [[ "$do_all" -eq 1 ]]; then
         mapfile -t files < <(find_appimages "$search")
-        [[ ${#files[@]} -eq 0 ]] && die "No AppImages found."
-
+        if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No AppImages found in '$search'."
+            return
+        fi
         for f in "${files[@]}"; do
-            move_one_file "$f"
+            # The check for managed files is now in find_appimages
+            read -r desktop_id has_active <<< "$(get_appimage_metadata "$f")"
+            all_appimages_info+=("$f|$desktop_id|$has_active")
         done
-        return
+    elif [[ -n "$specific_file" ]]; then
+        if [[ ! -f "$specific_file" ]]; then
+            die "File not found: $specific_file"
+        fi
+        # Check if it's in the managed directory
+        local full_path
+        full_path=$(readlink -f "$specific_file")
+        if [[ "$full_path" == "$APPIMG_DIR/managed/"* ]]; then
+                echo "Skipping move: $specific_file is already managed."
+                return
+        fi
+        read -r desktop_id has_active <<< "$(get_appimage_metadata "$specific_file")"
+        all_appimages_info+=("$specific_file|$desktop_id|$has_active")
     fi
 
-    # Single file mode
-    if [[ -z "$specific_file" ]]; then
-        die "You must provide a file unless using --all"
-    fi
+    # Group AppImages by desktop ID (or 'no_desktop_id' if none found)
+    declare -A grouped_appimages # key: desktop_id, value: newline-separated list of "path|has_active"
 
-    # Skip if file is already managed, except tmp
-    if [[ "$specific_file" == "$APPIMG_DIR"* && "$specific_file" != "$APPIMG_DIR/tmp"* ]]; then
-        echo "Skipping (already in appimages): $specific_file"
-        exit 0
-    fi
+    for info_string in "${all_appimages_info[@]}"; do
+        IFS='|' read -r path desktop_id has_active <<< "$info_string"
+        if [[ -z "$desktop_id" ]]; then
+            if [[ "$has_active" -eq 1 ]]; then
+                desktop_id=$(appname_from_path "$path")
+            else
+                desktop_id="no_desktop_id"
+            fi
+        fi
 
-    if [[ ! -f "$specific_file" ]]; then
-        die "File not found: $specific_file"
-    fi
+        if [[ -n "${grouped_appimages[$desktop_id]}" ]]; then
+            grouped_appimages[$desktop_id]+=$'\n'
+        fi
+        grouped_appimages[$desktop_id]+="$path|$has_active"
+    done
 
-    move_one_file "$specific_file"
+    # Process grouped AppImages by desktop ID
+    for desktop_id in "${!grouped_appimages[@]}"; do
+        # Convert newline-separated string to array, preserving spaces in filenames
+        mapfile -t app_files_info < <(echo "${grouped_appimages[$desktop_id]}")
+        
+        local primary_app_path=""
+        local active_app_path=""
+        local first_valid_app_path=""
+
+        # Find the primary AppImage: prioritize #active, otherwise take the first valid one
+        for app_info in "${app_files_info[@]}"; do
+            if [[ -z "$app_info" ]]; then continue; fi
+            IFS='|' read -r current_path current_has_active <<< "$app_info"
+            if [[ "$current_has_active" -eq 1 ]]; then
+                active_app_path="$current_path"
+            fi
+            if [[ -z "$first_valid_app_path" ]]; then
+                first_valid_app_path="$current_path"
+            fi
+        done
+        
+        if [[ -n "$active_app_path" ]]; then
+            primary_app_path="$active_app_path"
+        else
+            primary_app_path="$first_valid_app_path"
+        fi
+        
+
+        # If still no primary app (e.g., no files or all were managed), skip
+        if [[ -z "$primary_app_path" ]]; then
+            continue
+        fi
+
+        local dest_dir="$APPIMG_DIR/managed/$desktop_id"
+        local dest_appimage="$dest_dir/$(basename "$primary_app_path")"
+        local existing_managed_appimage=""
+
+        # Check if an appimage for this desktop_id already exists in managed/
+        if [[ -d "$dest_dir" ]]; then
+            existing_managed_appimage=$(find "$dest_dir" -maxdepth 1 -type f -iname "*.AppImage" | head -n 1)
+        fi
+
+        # Move the primary AppImage
+        mkdir -p "$dest_dir"
+        if [[ -n "$existing_managed_appimage" && "$(readlink -f "$primary_app_path")" != "$(readlink -f "$existing_managed_appimage")" ]]; then
+            echo "Overwriting existing managed AppImage for $desktop_id with $primary_app_path"
+            mv -f "$primary_app_path" "$dest_appimage" || die "Failed to move $primary_app_path"
+        elif [[ -z "$existing_managed_appimage" ]]; then
+            echo "Moving $primary_app_path → $dest_appimage"
+            mv "$primary_app_path" "$dest_appimage" || die "Failed to move $primary_app_path"
+        elif [[ "$(readlink -f "$primary_app_path")" == "$(readlink -f "$existing_managed_appimage")" ]]; then
+            echo "Skipping move: $primary_app_path is already the managed version."
+        fi
+
+        # Move any other AppImages in this group (that are not the primary) to unmanaged
+        for app_info in "${app_files_info[@]}"; do
+            if [[ -z "$app_info" ]]; then continue; fi
+            IFS='|' read -r current_path current_has_active <<< "$app_info"
+            if [[ "$current_path" != "$primary_app_path" ]]; then
+                local unmanaged_name
+                unmanaged_name=$(basename "$current_path")
+                local unmanaged_dir="$APPIMG_DIR/unmanaged"
+
+                # Don't move if it's already in the target directory
+                if [[ "$(readlink -f "$current_path")" != "$(readlink -f "$unmanaged_dir/$unmanaged_name")" ]]; then
+                    echo "Moving $current_path → $unmanaged_dir/$unmanaged_name (duplicate/non-primary for $desktop_id)"
+                    mv "$current_path" "$unmanaged_dir/$unmanaged_name" || die "Failed to move $current_path to unmanaged."
+                fi
+            fi
+        done
+    done
+
+    # Move any AppImages that ended up in the 'no_desktop_id' group and were not chosen as primary (which shouldn't happen if #active logic is working)
+    # This loop specifically handles files that never had a desktop_id and were not selected as active.
+    if [[ -n "${grouped_appimages['no_desktop_id']}" ]]; then
+        IFS=$'\n' read -ra no_id_files_info <<< "${grouped_appimages['no_desktop_id']}"
+        for app_info in "${no_id_files_info[@]}"; do
+            if [[ -z "$app_info" ]]; then continue; fi
+            IFS='|' read -r current_path current_has_active <<< "$app_info"
+            
+            # Check if this file was already moved as a primary (which should not happen for 'no_desktop_id' if logic is robust)
+            # Or if it was already moved as a duplicate.
+            # This is a final catch-all.
+            if [[ ! -f "$current_path" ]]; then # If file doesn't exist, it has already been moved
+                continue
+            fi
+            
+            local unmanaged_name=$(basename "$current_path")
+            echo "Moving $current_path → $APPIMG_DIR/unmanaged/$unmanaged_name \(no desktop ID\)"
+            mv "$current_path" "$APPIMG_DIR/unmanaged/$unmanaged_name" || die "Failed to move $current_path to unmanaged."
+        done
+    fi
 }
 
 # ------------------------------------------------------------
 # Command: appimg update
 # ------------------------------------------------------------
 cmd_update() {
-    local fast_mode=0
     local target_app_name=""
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --fast) fast_mode=1; shift ;;
             -*) die "Unknown option for update: $1" ;;
             *)
                 if [[ -n "$target_app_name" ]]; then
@@ -197,13 +352,13 @@ cmd_update() {
 
     local dirs_to_update
     if [[ -n "$target_app_name" ]]; then
-        local target_dir="$APPIMG_DIR/$target_app_name"
+        local target_dir="$APPIMG_DIR/managed/$target_app_name"
         if [[ ! -d "$target_dir" ]]; then
             die "Application '$target_app_name' not found."
         fi
         dirs_to_update=("$target_dir")
     else
-        dirs_to_update=("$APPIMG_DIR"/*)
+        dirs_to_update=("$APPIMG_DIR/managed"/*)
     fi
 
     for dir in "${dirs_to_update[@]}"; do
@@ -237,45 +392,114 @@ cmd_update() {
         local terminal_from_desktop=""
         local categories_from_desktop=""
 
-        if [[ $fast_mode -eq 0 ]]; then
-            # Always attempt to extract icons since we need the embedded .desktop file info
-            tmpdir=$(mktemp -d)
-            (cd "$tmpdir" && "$executable_appimage" --appimage-extract >/dev/null 2>&1) || true
+        # Always attempt to extract icons since we need the embedded .desktop file info
+        tmpdir=$(mktemp -d)
+        
+        # Define glob patterns for targeted extraction
+        local glob_patterns=(
+            '*.desktop'
+            'usr/share/applications/*.desktop'
+            'share/applications/*.desktop'
+            'usr/share/icons/**/*'
+            'share/icons/**/*'
+            'usr/share/pixmaps/*'
+            'share/pixmaps/*'
+            '*.png'
+            '*.svg'
+            '**/*.ico'
+        )
 
-            local icon_name=""
-            local desktop_name=""
-
+        # Perform targeted extraction for each glob pattern
+        local extracted_successfully=false
+        for pattern in "${glob_patterns[@]}"; do
+            (cd "$tmpdir" && "$executable_appimage" --appimage-extract "$pattern") >/dev/null 2>&1 || true
             if [[ -d "$tmpdir/squashfs-root" ]]; then
-                # Try to pick the correct icon by reading the embedded .desktop file's Icon key
-                desktop_inside=$(find "$tmpdir/squashfs-root" -type f -iname "*.desktop" | head -n 1)
-                if [[ -n "$desktop_inside" ]]; then
-                    icon_name=$(grep -Ei '^Icon=' "$desktop_inside" | head -n1 | sed -E 's/Icon=//I') || true
-                    icon_name="${icon_name%%$'\r'}"
+                extracted_successfully=true
+            fi
+        done
+        
+        # If the above fails to create squashfs-root or get files, perform a full extract as fallback
+        if [[ "$extracted_successfully" == "false" ]]; then
+            echo "Warning: Targeted extraction failed, falling back to full extraction for $executable_appimage." >&2
+            (cd "$tmpdir" && "$executable_appimage" --appimage-extract >/dev/null 2>&1) || true
+        fi
 
-                    desktop_name=$(grep -Ei '^Name=' "$desktop_inside" | head -n1 | sed -E 's/Name=//I') || true
-                    desktop_name="${desktop_name%%$'\r'}"
-                    if [[ -n "$desktop_name" ]]; then
-                        name_from_desktop_file="$desktop_name"
-                    fi
+        if [[ ! -d "$tmpdir/squashfs-root" ]]; then
+            echo "Warning: Failed to extract squashfs-root for $executable_appimage. Skipping." >&2
+            rm -rf "$tmpdir"
+            continue # Move to next AppImage in the loop
+        fi
 
-                    terminal_from_desktop=$(grep -Ei '^Terminal=' "$desktop_inside" | head -n1 | sed -E 's/Terminal=//I') || true
-                    terminal_from_desktop="${terminal_from_desktop%%$'\r'}"
-                    categories_from_desktop=$(grep -Ei '^Categories=' "$desktop_inside" | head -n1 | sed -E 's/Categories=//I') || true
-                    categories_from_desktop="${categories_from_desktop%%$'\r'}"
+        local icon_name=""
+        local desktop_name=""
+
+        if [[ -d "$tmpdir/squashfs-root" ]]; then
+            # Try to pick the correct icon by reading the embedded .desktop file's Icon key
+            desktop_inside=$(find "$tmpdir/squashfs-root" -type f -iname "*.desktop" | head -n 1)
+            if [[ -n "$desktop_inside" ]]; then
+                icon_name=$(grep -Ei '^Icon=' "$desktop_inside" | head -n1 | sed -E 's/Icon=//I') || true
+                icon_name="${icon_name%%$'\r'}"
+
+                desktop_name=$(grep -Ei '^Name=' "$desktop_inside" | head -n1 | sed -E 's/Name=//I') || true
+                desktop_name="${desktop_name%%$'\r'}"
+                if [[ -n "$desktop_name" ]]; then
+                    name_from_desktop_file="$desktop_name"
                 fi
 
-                icon=$(find "$dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
-                if [[ -z "$icon" ]]; then
+                terminal_from_desktop=$(grep -Ei '^Terminal=' "$desktop_inside" | head -n1 | sed -E 's/Terminal=//I') || true
+                terminal_from_desktop="${terminal_from_desktop%%$'\r'}"
+                categories_from_desktop=$(grep -Ei '^Categories=' "$desktop_inside" | head -n1 | sed -E 's/Categories=//I') || true
+                categories_from_desktop="${categories_from_desktop%%$'\r'}"
+            fi
 
-                    # Search for SVG first in common icon directories
-                    icon_candidate=""
-                    if [[ -n "$icon_name" ]]; then
-                        icon_candidate=$(find "$tmpdir/squashfs-root" \( -path "*/usr/share/icons/*" -o -path "*/usr/share/pixmaps/*" -o -path "*/share/icons/*" -o -path "*/share/pixmaps/*" -o -path "*" \) -type f \( -iname "$icon_name.svg" -o -iname "${icon_name,,}.svg" -o -iname "${icon_name^^}.svg" \) | head -n 1 || true)
-                    fi
+            icon=$(find "$dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
+            if [[ -z "$icon" ]]; then
 
-                    # If no SVG or specific icon, try PNG in same dirs, pick largest
-                    if [[ -z "$icon_candidate" ]]; then
-                        mapfile -t png_candidates < <(find "$tmpdir/squashfs-root" \( -path "*/usr/share/icons/*" -o -path "*/usr/share/pixmaps/*" -o -path "*/share/icons/*" -o -path "*/share/share/pixmaps/*" -o -path "*" \) -type f \( -iname "$icon_name.png" -o -iname "${icon_name,,}.png" -o -iname "${icon_name^^}.png" \))
+                # Search for SVG first in common icon directories
+                icon_candidate=""
+                if [[ -n "$icon_name" ]]; then
+                    icon_candidate=$(find "$tmpdir/squashfs-root" \( -path "*/usr/share/icons/*" -o -path "*/usr/share/pixmaps/*" -o -path "*/share/icons/*" -o -path "*/share/pixmaps/*" -o -path "*" \) -type f \( -iname "$icon_name.svg" -o -iname "${icon_name,,}.svg" -o -iname "${icon_name^^}.svg" \) | head -n 1 || true)
+                fi
+
+                # If no SVG or specific icon, try PNG in same dirs, pick largest
+                if [[ -z "$icon_candidate" ]]; then
+                    mapfile -t png_candidates < <(find "$tmpdir/squashfs-root" \( -path "*/usr/share/icons/*" -o -path "*/usr/share/pixmaps/*" -o -path "*/share/icons/*" -o -path "*/share/share/pixmaps/*" -o -path "*" \) -type f \( -iname "$icon_name.png" -o -iname "${icon_name,,}.png" -o -iname "${icon_name^^}.png" \))
+                    best_png=""
+                    best_size=0
+                    for ic in "${png_candidates[@]}"; do
+                        size=$(stat -c %s "$ic" 2>/dev/null)
+                        if (( size > best_size )); then
+                            best_size=$size
+                            best_png="$ic"
+                        fi
+                    done
+                    icon_candidate="$best_png"
+                fi
+
+                # If still not found, try XPM
+                if [[ -z "$icon_candidate" ]]; then
+                    icon_candidate=$(find "$tmpdir/squashfs-root" \( -path "*/usr/share/icons/*" -o -path "*/usr/share/pixmaps/*" -o -path "*/share/icons/*" -o -path "*/share/pixmaps/*" -o -path "*" \) -type f \( -iname "$icon_name.xpm" -o -iname "${icon_name,,}.xpm" -o -iname "${icon_name^^}.xpm" \) | head -n 1 || true)
+                fi
+
+                # Fallback: pick the best SVG, else largest PNG, else largest XPM if no specific icon found
+                if [[ -z "$icon_candidate" ]]; then
+                    # Prefer SVG
+                    mapfile -t svg_candidates < <(find "$tmpdir/squashfs-root" -type f -iname '*.svg' -not -iname '*thumbnail*')
+                    if [[ ${#svg_candidates[@]} -gt 0 ]]; then
+                        # Pick largest SVG
+                        best_svg=""
+                        best_size=0
+                        for ic in "${svg_candidates[@]}"; do
+                            size=$(stat -c %s "$ic" 2>/dev/null)
+                            if (( size > best_size )); then
+                                best_size=$size
+                                best_svg="$ic"
+                            fi
+                        done
+                        icon_candidate="$best_svg"
+                    else
+                        # Pick largest PNG
+                        mapfile -t png_candidates < <(find "$tmpdir/squashfs-root" -type f -iname '*.png' -not -iname '*thumbnail*')
                         best_png=""
                         best_size=0
                         for ic in "${png_candidates[@]}"; do
@@ -286,66 +510,29 @@ cmd_update() {
                             fi
                         done
                         icon_candidate="$best_png"
-                    fi
-
-                    # If still not found, try XPM
-                    if [[ -z "$icon_candidate" ]]; then
-                        icon_candidate=$(find "$tmpdir/squashfs-root" \( -path "*/usr/share/icons/*" -o -path "*/usr/share/pixmaps/*" -o -path "*/share/icons/*" -o -path "*/share/pixmaps/*" -o -path "*" \) -type f \( -iname "$icon_name.xpm" -o -iname "${icon_name,,}.xpm" -o -iname "${icon_name^^}.xpm" \) | head -n 1 || true)
-                    fi
-
-                    # Fallback: pick the best SVG, else largest PNG, else largest XPM if no specific icon found
-                    if [[ -z "$icon_candidate" ]]; then
-                        # Prefer SVG
-                        mapfile -t svg_candidates < <(find "$tmpdir/squashfs-root" -type f -iname '*.svg' -not -iname '*thumbnail*')
-                        if [[ ${#svg_candidates[@]} -gt 0 ]]; then
-                            # Pick largest SVG
-                            best_svg=""
+                        # If still not found, pick largest XPM
+                        if [[ -z "$icon_candidate" ]]; then
+                            mapfile -t xpm_candidates < <(find "$tmpdir/squashfs-root" -type f -iname '*.xpm' -not -iname '*thumbnail*')
+                            best_xpm=""
                             best_size=0
-                            for ic in "${svg_candidates[@]}"; do
+                            for ic in "${xpm_candidates[@]}"; do
                                 size=$(stat -c %s "$ic" 2>/dev/null)
                                 if (( size > best_size )); then
                                     best_size=$size
-                                    best_svg="$ic"
+                                    best_xpm="$ic"
                                 fi
                             done
-                            icon_candidate="$best_svg"
-                        else
-                            # Pick largest PNG
-                            mapfile -t png_candidates < <(find "$tmpdir/squashfs-root" -type f -iname '*.png' -not -iname '*thumbnail*')
-                            best_png=""
-                            best_size=0
-                            for ic in "${png_candidates[@]}"; do
-                                size=$(stat -c %s "$ic" 2>/dev/null)
-                                if (( size > best_size )); then
-                                    best_size=$size
-                                    best_png="$ic"
-                                fi
-                            done
-                            icon_candidate="$best_png"
-                            # If still not found, pick largest XPM
-                            if [[ -z "$icon_candidate" ]]; then
-                                mapfile -t xpm_candidates < <(find "$tmpdir/squashfs-root" -type f -iname '*.xpm' -not -iname '*thumbnail*')
-                                best_xpm=""
-                                best_size=0
-                                for ic in "${xpm_candidates[@]}"; do
-                                    size=$(stat -c %s "$ic" 2>/dev/null)
-                                    if (( size > best_size )); then
-                                        best_size=$size
-                                        best_xpm="$ic"
-                                    fi
-                                done
-                                icon_candidate="$best_xpm"
-                            fi
+                            icon_candidate="$best_xpm"
                         fi
                     fi
+                fi
 
-                    if [[ -n "$icon_candidate" ]]; then
-                        ext="${icon_candidate##*.}"
-                        cp "$icon_candidate" "$dir/icon.$ext" 2>/dev/null || true
-                        icon="$dir/icon.$ext"
-                        # Create .noiconkeep marker file
-                        touch "$dir/.noiconkeep"
-                    fi
+                if [[ -n "$icon_candidate" ]]; then
+                    ext="${icon_candidate##*.}"
+                    cp "$icon_candidate" "$dir/icon.$ext" 2>/dev/null || true
+                    icon="$dir/icon.$ext"
+                    # Create .noiconkeep marker file
+                    touch "$dir/.noiconkeep"
                 fi
             fi
             rm -rf "$tmpdir"
@@ -388,20 +575,8 @@ EOF
 # Command: appimg setup-all
 # ------------------------------------------------------------
 cmd_setup_all() {
-    local fast_mode=0
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --fast) fast_mode=1; shift ;;
-            *) shift ;;
-        esac
-    done
-
     cmd_move --all
-    if [[ $fast_mode -eq 1 ]]; then
-        cmd_update --fast
-    else
-        cmd_update
-    fi
+    cmd_update
 }
 
 
@@ -423,152 +598,23 @@ cmd_reset() {
         fi
     done
 
-    mkdir -p "$APPIMG_DIR/tmp"
-
     # ---------------------------------------------
-    # 2. Move all AppImage files and their icons into tmp/
+    # 2. Move all AppImage files from managed/ to unmanaged/
     # ---------------------------------------------
-    find "$APPIMG_DIR" -mindepth 2 -type f -iname "*.AppImage" | while IFS= read -r f; do
+    echo "Moving managed AppImages to unmanaged..."
+    find "$APPIMG_DIR/managed" -type f -iname "*.AppImage" | while IFS= read -r f; do
         file_name=$(basename "$f")
-        app_dir=$(dirname "$f")
-        echo "Moving $f → $APPIMG_DIR/tmp/$file_name"
-        mv "$f" "$APPIMG_DIR/tmp/$file_name" || continue
-
-        # Check for .noiconkeep marker; if present, skip moving icon
-        if [[ ! -f "$app_dir/.noiconkeep" ]]; then
-            icon=$(find "$app_dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
-            if [[ -n "$icon" && -f "$icon" ]]; then
-                icon_ext="${icon##*.}"
-                base_name="${file_name%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}"
-                app_name="${base_name%%#*}"
-                icon_name="${app_name}-icon.$icon_ext"
-                echo "Moving icon $icon → $APPIMG_DIR/tmp/$icon_name"
-                mv "$icon" "$APPIMG_DIR/tmp/$icon_name" || echo "Failed to move icon $icon"
-            fi
-        else
-            echo "Skipping icon move for $app_dir due to .noiconkeep"
-        fi
+        echo "Moving $f → $APPIMG_DIR/unmanaged/$file_name"
+        mv "$f" "$APPIMG_DIR/unmanaged/$file_name" || continue
     done
 
     # ---------------------------------------------
-    # 3. Delete all folders inside ~/.appimages
-    #    except: tmp/ and placeholder-icon.png
+    # 3. Delete all managed folders
     # ---------------------------------------------
-    for item in "$APPIMG_DIR"/*; do
-        base="$(basename "$item")"
-        [[ "$base" == "tmp" ]] && continue
-        [[ "$base" == "placeholder-icon.png" ]] && continue
-        if [[ -d "$item" ]]; then
-            echo "Deleting folder: $item"
-            rm -rf "$item"
-        fi
-    done
+    echo "Deleting managed AppImage directories..."
+    find "$APPIMG_DIR/managed" -mindepth 1 -type d -exec rm -rf {} + 2>/dev/null || true
 
-    # ---------------------------------------------
-    # 4. Remove executable bit from all AppImages in tmp
-    # ---------------------------------------------
-    echo "Removing executable permissions from AppImages in tmp/"
-    shopt -s nullglob
-    for f in "$APPIMG_DIR"/tmp/*.AppImage; do
-        chmod -x "$f"
-    done
-    shopt -u nullglob
-
-    echo "Reset complete! Run 'appimg setup-all' to rebuild."
 }
-
-
-# ------------------------------------------------------------
-# Command: appimg select
-# ------------------------------------------------------------
-cmd_select() {
-    [[ $# -eq 0 ]] && die "Usage: appimg select <appname> [--switch <version>]"
-    local app_name="$1"
-    shift
-    local app_dir="$APPIMG_DIR/$app_name"
-    [[ ! -d "$app_dir" ]] && die "Application not found: $app_name"
-
-    local do_switch=0
-    local target_version=""
-    if [[ "$1" == "--switch" ]]; then
-        do_switch=1
-        target_version="$2"
-        [[ -z "$target_version" ]] && die "No version specified for --switch"
-        shift 2
-    fi
-
-    # --- List versions ---
-    if [[ $do_switch -eq 0 ]]; then
-        echo "Available versions for $app_name:"
-        local active_path=""
-        local symlink_target=""
-        if [[ -L "$app_dir/$app_name.AppImage" ]]; then
-            active_path=$(readlink "$app_dir/$app_name.AppImage")
-            symlink_target=$(basename "$active_path")
-        fi
-
-        shopt -s nullglob
-        local versions=("$app_dir/$app_name"#*.AppImage)
-        shopt -u nullglob
-
-        if [[ ${#versions[@]} -eq 0 ]]; then
-            if [[ -f "$app_dir/$app_name.AppImage" ]]; then
-                echo " * $(basename "$app_dir/$app_name.AppImage") (active, no versions)"
-            else
-                echo "No versions found."
-            fi
-            return
-        fi
-
-        for v_path in "${versions[@]}"; do
-            v_base=$(basename "$v_path")
-            if [[ "$v_base" == "$symlink_target" ]]; then
-                echo " * $v_base (active)"
-            else
-                echo "   $v_base"
-            fi
-        done
-        return
-    fi
-
-    # --- Switch version ---
-    if [[ $do_switch -eq 1 ]]; then
-        local target_appimage_path=""
-        # Try to match version string directly
-        shopt -s nullglob
-        local found_versions=("$app_dir/$app_name#$target_version.AppImage" "$app_dir/$app_name#$target_version" "$app_dir/$target_version")
-        for v in "${found_versions[@]}"; do
-             if [[ -f "$v" ]]; then
-                target_appimage_path="$v"
-                break
-             fi
-        done
-
-        if [[ -z "$target_appimage_path" && -f "$app_dir/$target_version" ]]; then
-            target_appimage_path="$app_dir/$target_version"
-        fi
-        
-        # Try to match by index if not found (and is a number)
-        if [[ -z "$target_appimage_path" && "$target_version" =~ ^[0-9]+$ ]]; then
-            mapfile -t versions_sorted < <(find "$app_dir" -maxdepth 1 -type f -name "$app_name#*.AppImage" | sort -V)
-            if [[ ${#versions_sorted[@]} -gt 0 && $target_version -gt 0 && $target_version -le ${#versions_sorted[@]} ]]; then
-                target_appimage_path="${versions_sorted[$target_version-1]}"
-            fi
-        fi
-
-        if [[ -z "$target_appimage_path" || ! -f "$target_appimage_path" ]]; then
-            die "Version '$target_version' not found for $app_name."
-        fi
-
-        local symlink="$app_dir/$app_name.AppImage"
-        local target_basename
-        target_basename=$(basename "$target_appimage_path")
-        (cd "$app_dir" && ln -sf "$target_basename" "$app_name.AppImage")
-        echo "Switched $app_name to $target_basename"
-        cmd_update "$app_name"
-    fi
-}
-
 
 # ------------------------------------------------------------
 # Command: appimg help
@@ -578,10 +624,9 @@ cmd_help() {
     echo "Commands:"
     echo "  appimg ls [-s dir]"
     echo "  appimg move [--all] [-s dir] [file.AppImage]"
-    echo "  appimg update [APPNAME] [--fast]"
-    echo "  appimg setup-all [--fast]"
+    echo "  appimg update [APPNAME]"
+    echo "  appimg setup-all"
     echo "  appimg reset"
-    echo "  appimg select <appname> [--switch <version>]"
     echo "  appimg version"
     echo "  appimg -v"
     echo "  appimg help"
@@ -606,7 +651,6 @@ main() {
         update)    shift; cmd_update "$@" ;;
         setup-all) shift; cmd_setup_all "$@" ;;
         reset)     shift; cmd_reset ;;
-        select)    shift; cmd_select "$@" ;;
         version|-v) shift; cmd_version "$@" ;;
         help)      shift; cmd_help ;;
         version)   shift; cmd_version ;;

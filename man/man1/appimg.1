@@ -1,38 +1,39 @@
-.TH "appimg" 1 "December 2025" "0.2.0" "appimg man page"
+.TH "appimg" 1 "December 2025" "0.3.0" "appimg man page"
 .SH NAME
 appimg - manage AppImages
 .SH SYNOPSIS
-appimg [COMMAND] [APPIMAGE]
+appimg [COMMAND] [OPTIONS] [ARGS]
 .SH DESCRIPTION
-A script to manage AppImages.
-.SH COMMANDS
-.TP
-\fBmove\fR
-Move AppImage files into the managed directory (~/.appimages). Each AppImage should end up in its own folder.
+A script to manage, organize, and register AppImage files under
+.BR ~/.appimages .
+
+AppImages are organized into two major categories:
 .RS
-.PP
-\fBUSAGE:\fR
-.B appimg move [OPTIONS] [PATH]
-.PP
-\fBOPTIONS:\fR
 .TP
-\fB-s DIR\fR
-Specify a directory to search for AppImages.
+.B managed/
+Contains AppImages that have been organized and registered by appimg.
+Each AppImage has its own subdirectory, named after its desktop-file ID.
 .TP
-\fB--all\fR
-Move all AppImages found in the search scope.
-.PP
-\fBBEHAVIOR:\fR
-If ~/.appimages does not exist, create it.
-For each AppImage found, create a folder for that AppImage inside ~/.appimages and move the file there.
-Do not attempt to move files that are already inside ~/.appimages into the same location.
-Do handle ~/.appimages/tmp specially (it may contain reset files) — do not skip it when appropriate, but avoid moving from a folder into itself.
-If --all is omitted, the user must provide the AppImage path: appimg move ~/Downloads/myapp.AppImage.
-Matching of file extensions is case-insensitive.
+.B unmanaged/
+Contains AppImages that are newly discovered, reset from managed/, or moved without an update.
 .RE
+
+Generated launchers are symlinked into:
+.PP
+    ~/.local/share/applications/
+
+You may provide a custom icon by placing an icon file (e.g. icon.png, icon.svg)
+in a managed application folder and running:
+.PP
+    appimg update [APPNAME]
+
+If no icon exists, placeholder-icon.png is used.
+
+.SH COMMANDS
+
 .TP
 \fBls\fR
-List AppImage files. By default searches the user\'s home directory.
+List AppImage files. By default searches the user’s home directory.
 .RS
 .PP
 \fBUSAGE:\fR
@@ -41,106 +42,159 @@ List AppImage files. By default searches the user\'s home directory.
 \fBOPTIONS:\fR
 .TP
 \fB-s DIR\fR
-Specify a directory to search ("s" = search scope).
+Specify a directory to search.
 .PP
 \fBOUTPUT:\fR
-Prints each found AppImage with its full path.
+Prints each AppImage with full path.
+.PP
+\fBNOTES:\fR
+File extension matching is case-insensitive (.AppImage, .appimage).
 .RE
+
 .TP
-\fBupdate\fR
-Scan ~/.appimages, and for each folder containing an AppImage generate a .desktop file and ensure a proper icon and executable bit. If APPNAME is provided, only that application is updated.
+\fBmove\fR
+Move AppImage files. This command has two distinct modes: **Managed Import** (default, sorting files into the library structure) and **Simple Move** (if a target directory is provided).
 .RS
 .PP
 \fBUSAGE:\fR
-.B appimg update [APPNAME] [--fast]
+.B appimg move [OPTIONS] [FILE] [TARGET_DIR]
 .PP
 \fBOPTIONS:\fR
 .TP
-\fB[APPNAME]\fR
-Update a specific app.
+\fB-s DIR\fR
+Specify a directory to search when using \fB--all\fR (defaults to \fB$HOME\fR).
 .TP
-\fB--fast\fR
-Skip icon and .desktop file extraction.
+\fB--all\fR
+Process all AppImages found in the search scope.
 .PP
-\fBBEHAVIOR:\fR
-For each folder in ~/.appimages that contains an AppImage:
-Generate or update the .desktop file for the application.
-If --fast is provided, skip extraction and use existing icons or a placeholder.
-Otherwise, determine the icon using the following precedence:
-1. If icon.* already exists in the folder, use it.
-2. Otherwise, extract the AppImage and inspect its embedded .desktop Icon key; then try to find a matching icon:
-Search common icon directories (e.g. /usr/share/icons, /usr/share/pixmaps) for an SVG matching the name.
-If no matching SVG, search for a matching PNG and prefer the largest PNG file by file size.
-If still not found, search for a matching XPM.
-If no direct match is found, fall back to the largest SVG, then largest PNG, then largest XPM from the extracted contents.
-3. If no icon is found at all, use ~/.appimages/placeholder-icon.png.
-Copy the chosen icon into the app's folder as icon.*.
-Create a .noiconkeep marker if needed to prevent icon copying on reset.
-Ensure the AppImage file is executable.
-Create a symlink for the generated .desktop file in the system applications directory (e.g. ~/.local/share/applications).
-Note: AppImage file extensions are treated case-insensitively.
+\fBBEHAVIOR MODES:\fR
+.RS
+.TP
+\fB1. Simple Move (Target Directory Provided)\fR
+If the last argument is a directory, the command performs a standard move operation.
+.RS
+.IP • 2
+The target directory is created if missing.
+.IP •
+If \fB--all\fR is used, all found AppImages are moved directly to \fBTARGET_DIR/\fR.
+.IP •
+If a specific file is provided, it is moved to \fBTARGET_DIR/\fR. Files already in the managed directory are skipped.
 .RE
 .TP
-\fBsetup-all\fR
-Convenience command that runs appimg move and appimg update with their default options to discover, move, and register AppImages.
+\fB2. Managed Import (Default Mode)\fR
+If no target directory is provided, AppImages are imported into the library structure.
+.br
+\fBRequires\fR a file argument or the \fB--all\fR flag.
+.RS
+.IP • 2
+Creates \fB~/.appimages/managed/\fR and \fB~/.appimages/unmanaged/\fR if missing.
+.IP •
+Files are grouped by their embedded desktop file ID.
+.IP •
+\fBPrimary Selection:\fR For each group, the primary file is chosen: \fB#active\fR tag is prioritized, otherwise the first encountered file is used.
+.IP •
+The Primary AppImage is moved to \fB~/.appimages/managed/<APPID>/\fR. Existing managed versions may be overwritten.
+.IP •
+All other duplicate AppImages (non-primary versions) are moved to \fB~/.appimages/unmanaged/\fR.
+.IP •
+AppImages with no detectable ID are also moved to \fB~/.appimages/unmanaged/\fR.
+.RE
+.RE
+.PP
+Matching of \fB.AppImage\fR/\fB.appimage\fR is case-insensitive.
+.RE
+
+.TP
+\fBupdate\fR
+Generate or update .desktop files, icons, symlinks, and permissions for managed AppImages.
+If \fBAPPNAME\fR is provided, only that specific application is updated.
 .RS
 .PP
 \fBUSAGE:\fR
-.B appimg setup-all [--fast]
+.B appimg update [APPNAME]
+.PP
+\fBBEHAVIOR:\fR
+For each application directory in \fB~/.appimages/managed/\fR containing an AppImage:
+.RS
+.IP • 2
+Generate or update the .desktop file (e.g., org.kde.krita.desktop).
+.IP •
+Ensure the AppImage file is executable.
+.IP •
+Create or update a symlink in \fB~/.local/share/applications/\fR.
 .RE
+.PP
+\fBIcon Selection Precedence:\fR
+.RS
+.IP 1. 4
+\fBExisting File:\fR If an \fBicon.*\fR file (png/svg) already exists in the application folder, it is used.
+.IP 2.
+\fBInternal Common Paths:\fR The AppImage is extracted to inspect the .desktop \fBIcon\fR key.
+.RS
+.IP • 2
+Search \fBusr/share/icons\fR and \fBusr/share/pixmaps\fR inside the extracted AppImage for a matching SVG (case-insensitive).
+.IP •
+If none, search those paths for a matching PNG (largest file chosen).
+.IP •
+If none, search those paths for a matching XPM.
+.RE
+.IP 3.
+\fBGlobal Fallback:\fR If no icon is found in common paths, search the \fBentire\fR extracted contents for the largest SVG, then largest PNG, then largest XPM.
+.IP 4.
+\fBPlaceholder:\fR If no icon is found, \fB~/.appimages/placeholder-icon.png\fR is copied and used.
+.RE
+.PP
+\fBMarker File:\fR
+.br
+If the icon was extracted from the AppImage (not user-provided), a \fB.noiconkeep\fR file is created.
+This allows the icon to be safely overwritten during future updates or resets.
+.RE
+
+.TP
+\fBsetup-all\fR
+Perform a complete setup: discover AppImages, move them into managed/, then update them.
+.RS
+.PP
+\fBUSAGE:\fR
+.B appimg setup-all
+.PP
+\fBBEHAVIOR:\fR
+.IP • 2
+Runs: appimg move --all
+.IP •
+Runs: appimg update
+.IP •
+Cleans up outdated .desktop files and broken symlinks.
+.IP •
+Deletes empty directories in managed/.
+.RE
+
 .TP
 \fBreset\fR
-Reset the managed AppImage state. Move managed AppImages to a temporary area, remove their folders, and undo registration.
+Reset all managed AppImages by moving them to unmanaged/ and unregistering them.
 .RS
 .PP
 \fBUSAGE:\fR
 .B appimg reset
 .PP
 \fBBEHAVIOR:\fR
-Move all AppImage files from their folders in ~/.appimages into ~/.appimages/tmp.
-When moving, also move any icons that belong to an AppImage; rename them using the pattern <appname>-icon.* so they can be detected later by appimg update.
-After moving files to ~/.appimages/tmp, delete the now-empty app folders.
-Mark the moved AppImage files as non-executable.
-Remove any symlinks created in the system applications directory.
-appimg update should be able to detect icons in ~/.appimages/tmp (using the <appname>-icon.* pattern), rename them to icon.* and move them back to the appropriate folders when restoring.
-.RE
-.TP
-\fBselect\fR
-Manage and switch between multiple versions of an AppImage for a given application name.
+For each application in ~/.appimages/managed/:
 .RS
-.PP
-\fBUSAGE:\fR
-.B appimg select <appname>
-.B appimg select <appname> \-\-switch <VERSION>
-.PP
-\fBBEHAVIOR:\fR
-.TP
-\fBVersion Naming Convention\fR
-When \fBappimg move\fR processes AppImages, if multiple versions of the same application (basically when there\'s more than one appimage of the same name) are detected, it appends a unique #version\-string suffix to the filename (e.g., krita#1.AppImage, krita#2.AppImage). The # character denotes the start of the version string for identification purposes across commands.
-.TP
-\fBStorage Location\fR
-All versions of a single application are stored within the same dedicated subfolder under \fB~/.appimages\fR (e.g., \fB~/.appimages/krita/krita#1.AppImage\fR).
-.TP
-\fBActive Version Symlink\fR
-A symlink, named after the application without a version suffix (e.g., \fB~/.appimages/krita/krita.AppImage\fR), points to the currently active version. This symlink is the target for .desktop file entries and system integration.
-.TP
-\fBappimg select <appname>
-Lists all available versioned AppImages (e.g., krita#1.AppImage, krita#3.AppImage) found in the application\'s folder and indicates which version the active symlink currently points to.
-.TP
-\fBappimg select <appname> \-\-switch <VERSION>
-Modifies the active symlink (e.g., \fB~/.appimages/krita/krita.AppImage\fR) to point to the AppImage file corresponding to <VERSION>. Subsequently, \fBappimg update <appname>\fR is automatically run to re\-generate the .desktop file and ensure system integration reflects the new active version.
-.TP
-\fBInteractions with other commands\fR
-.RS
-.PP
-\fBappimg move\fR: Recognizes the # character as a version separator and ensures multiple versions of an application are grouped within the same folder.
-.PP
-\fBappimg reset\fR: Removes the active version symlink (e.g., krita.AppImage) when moving AppImages to \fB~/.appimages/tmp\fR. The version string (e.g., #1) is preserved in the AppImage filename during this move.
+.IP • 2
+Move its AppImage to ~/.appimages/unmanaged/.
+.IP •
+Remove its .desktop file from the managed folder.
+.IP •
+Remove its symlink from ~/.local/share/applications/.
+.IP •
+Delete the now-empty managed/<APPID>/ directory.
 .RE
+After the operation, all previously managed AppImages reside in unmanaged/.
 .RE
+
 .TP
 \fBversion\fR, \fB-v\fR
-Print the appimg version.
+Display the appimg version.
 .RS
 .PP
 \fBUSAGE:\fR
@@ -148,7 +202,21 @@ Print the appimg version.
 .br
 .B appimg -v
 .RE
+
+.SH NOTES
+.RS
+.IP • 2
+Treat .AppImage and .appimage equivalently.
+.IP •
+Managed directory: ~/.appimages/managed
+.IP •
+Unmanaged directory: ~/.appimages/unmanaged
+.IP •
+Placeholder icon: ~/.appimages/placeholder-icon.png
+.RE
+
 .SH AUTHOR
-pmnzt
-.SH REPORTING BUGS
-<https://github.com/pmnzt/appimage-manager/issues>
+.TP
+.B "pmnzt"
+.TP
+.I "https://github.com/pmnzt"

@@ -1,29 +1,47 @@
 # Directory layout
 
-Managed AppImages are stored under `~/.appimages/` using a per-application directory layout:
+AppImages are organized into two main categories under `~/.appimages/`:
+
+- `managed/`: Contains AppImages that have been organized and registered by `appimg`. Each managed AppImage resides in its own subdirectory, named after its application ID (derived from its `.desktop` file).
+- `unmanaged/`: Serves as a holding area for AppImages that are either newly discovered, have been reset from a managed state, or were moved without an update.
+
+### Managed AppImage Structure
+
+Managed AppImages follow a per-application directory layout, where the directory name is based on the application's desktop file ID. The ID is derived from the `.desktop` filename (e.g., `org.kde.krita` from `org.kde.krita.desktop`).
+
+Examples of desktop file IDs include:
+- `com.appname.App`
+- `org.kde.krita`
+- `org.blender.Blender`
+
+The resulting directory structure for managed AppImages would be:
 
 ```
 ~/.appimages/
-    MyApp/
-        MyApp.AppImage
-        icon.png       # optional application icon
-        MyApp.desktop
-    Editor/
-        Editor.AppImage
-        Editor.desktop
+    managed/
+        org.kde.krita/
+            org.kde.krita.AppImage
+            icon.png       # optional application icon
+            org.kde.krita.desktop
+        org.blender.Blender/
+            org.blender.Blender.AppImage
+            org.blender.Blender.desktop
+    unmanaged/
+        my_new_app.AppImage
+        another_app.AppImage
     placeholder-icon.png
 ```
 
-Generated `.desktop` launchers are symlinked into:
+Generated `.desktop` launchers for managed AppImages are symlinked into:
 
 ```
 ~/.local/share/applications/
 ```
 
-If you want to provide a custom icon for an AppImage, place the icon file (`.png`, `.svg`, `.ico`, etc.) in the same folder as the AppImage and run:
+If you want to provide a custom icon for a **managed** AppImage, place the icon file (`.png`, `.svg`, `.ico`, etc.) in the same folder as the AppImage (e.g., `~/.appimages/managed/org.kde.krita/icon.png`) and run:
 
 ```bash
-appimg update
+appimg update [APPNAME]
 ```
 
 If no icon is available, the `placeholder-icon.png` file will be used.
@@ -41,72 +59,71 @@ This document describes the CLI commands and expected behavior for managing AppI
 - Notes: File extension matching is case-insensitive (`.AppImage`, `.appimage`).
 
 2) `appimg move`
-- Description: Move AppImage files into the managed directory (`~/.appimages`). Each AppImage should end up in its own folder.
-- Usage: `appimg move [OPTIONS] [PATH]`
+- Description: Moves AppImage files from a source location to a destination. This command operates in two modes: "Direct Move" (moving files to a user-specified directory) or "Managed Import" (organizing files into the internal managed library structure based on metadata).
+- Usage: `appimg move [OPTIONS] [FILE] [TARGET_DIR]`
 - Options:
-	- `-s DIR` — specify a directory to search for AppImages.
-	- `--all` — move all AppImages found in the search scope.
+    - `-s`: Sets the source directory to search for AppImages when using `--all` (default is `$HOME`).
+    - `--all`: Automatically finds and processes all AppImages found in the search path.
 - Behavior:
-	- If `~/.appimages` does not exist, create it.
-	- For each AppImage found, create a folder for that AppImage inside `~/.appimages` and move the file there.
-	- Do not attempt to move files that are already inside `~/.appimages` into the same location.
-	- Do handle `~/.appimages/tmp` specially (it may contain reset files) — do not skip it when appropriate, but avoid moving from a folder into itself.
-	- If `--all` is omitted, the user must provide the AppImage path: `appimg move ~/Downloads/myapp.AppImage`.
-	- Matching of file extensions is case-insensitive.
+    - Path 1: A target directory is specified.
+        - Creates the target directory if it does not exist.
+        - If `--all` is used, finds all unmanaged AppImages in the search path and moves them into the target directory.
+        - If a specific file is provided, checks if the file is already in `managed/`. If not, moves the file to the target directory.
+    - Path 2: No target directory is specified (Managed Import).
+        - Gathers metadata (desktop ID and active status) for the specific file or all files found via `--all`.
+        - Groups the AppImages by their unique desktop ID.
+        - For each group (Application):
+            - Determines the "Primary" AppImage. Logic prioritizes files tagged as `#active`; if none are active, it defaults to the first valid file.
+            - Moves the Primary AppImage to `~/.appimages/managed/<desktop_id>/`.
+            - If a managed AppImage already exists for that ID, it is overwritten if the new file is different.
+            - Moves any secondary files (duplicates or non-active versions) to `~/.appimages/unmanaged/`.
+        - Files with no detectable desktop ID are moved directly to `~/.appimages/unmanaged/`.
 
 3) `appimg update`
-- Description: Scan `~/.appimages`, and for each folder containing an AppImage generate a `.desktop` file and ensure a proper icon and executable bit. If `APPNAME` is provided, only that application is updated.
-- Usage: `appimg update [APPNAME] [--fast]`
+- Description: Scan `~/.appimages/managed/`, and for each application folder containing an AppImage, generate a `.desktop` file and ensure a proper icon and executable bit. If `APPNAME` is provided, only that specific application in `managed/` is updated.
+- Usage: `appimg update [APPNAME]`
 - Behavior:
-	- For each folder in `~/.appimages` that contains an AppImage:
-		- Generate or update the `.desktop` file for the application.
-		- If `--fast` is provided, skip extraction and use existing icons or a placeholder.
-		- Otherwise, determine the icon using the following precedence:
-			1. If `icon.*` already exists in the folder, use it.
-			2. Otherwise, extract the AppImage and inspect its embedded `.desktop` `Icon` key; then try to find a matching icon:
-				 - Search common icon directories (e.g. `/usr/share/icons`, `/usr/share/pixmaps`) for an SVG matching the name.
-				 - If no matching SVG, search for a matching PNG and prefer the largest PNG file by file size.
-				 - If still not found, search for a matching XPM.
-				 - If no direct match is found, fall back to the largest SVG, then largest PNG, then largest XPM from the extracted contents.
-			  3. If no icon is found at all, use `~/.appimages/placeholder-icon.png`.
-		- Copy the chosen icon into the app's folder as `icon.*`.
-		- Create a `.noiconkeep` marker if needed to prevent icon copying on reset.
-		- Ensure the AppImage file is executable.
-		- Create a symlink for the generated `.desktop` file in the system applications directory (e.g. `~/.local/share/applications`).
+	- For each application folder in `~/.appimages/managed/` that contains an AppImage:
+		- Generate or update the `.desktop` file for the application, typically placed in the application's folder (e.g., `~/.appimages/managed/org.kde.krita/org.kde.krita.desktop`).
+		    - Determine the icon using the following precedence:
+      1. If an `icon.*` file (e.g., `icon.png`, `icon.svg`) already exists within the application's folder, it is used.
+      2. Otherwise, the AppImage is extracted (partially or fully) to inspect its embedded `.desktop` file for an `Icon` key. Then, the tool attempts to find a matching icon:
+         - It first searches within the extracted AppImage's internal common icon directories (e.g., `usr/share/icons`, `usr/share/pixmaps`) for an SVG matching the `Icon` key's name (case-insensitively).
+         - If no matching SVG is found, it searches these same directories for a matching PNG and prefers the largest PNG file by file size.
+         - If still not found, it searches these same directories for a matching XPM.
+         - If no icon is found based on the `Icon` key within these internal common directories, it falls back to searching the entire extracted AppImage contents for the largest SVG, then the largest PNG, then the largest XPM.
+      3. If no icon is found at all through the above methods, `~/.appimages/placeholder-icon.png` is copied and used.
+    - The chosen icon is copied into the app's folder as `icon.<extension>` (e.g., `icon.png`).
+    - A `.noiconkeep` marker file is created in the application's folder if the icon was extracted and copied from the AppImage, to signal that this icon can be safely overwritten on subsequent updates or resets. This file is NOT created if a custom `icon.*` file already existed in the application folder.
+		- Ensures the main AppImage file within the managed folder is executable.
+		- Creates a symlink for the generated `.desktop` file in the system applications directory (e.g., `~/.local/share/applications/org.kde.krita.desktop`).
 	- Note: AppImage file extensions are treated case-insensitively.
 
 4) `appimg setup-all`
-- Description: Convenience command that runs `appimg move` and `appimg update` with their default options to discover, move, and register AppImages.
-- Usage: `appimg setup-all [--fast]`
+- Description: Convenience command that orchestrates a complete setup by running `appimg move --all` to discover and manage AppImages, followed by `appimg update` to register and configure them. It also performs a cleanup of outdated desktop files and empty managed directories.
+- Usage: `appimg setup-all`
+- Behavior:
+	- Executes `appimg move --all`, which finds all AppImages in the default search scope (`$HOME`) and moves them into `~/.appimages/managed/`.
+	- Executes `appimg update`, which processes all newly moved (and existing) managed AppImages to generate `.desktop` files, set icons, and ensure executability.
+	- Performs additional cleanup:
+		- Removes any existing `.desktop` files and their symlinks associated with previously managed AppImages to prevent conflicts.
+		- Deletes any empty application directories that might remain in `~/.appimages/managed/` after previous operations.
+	- Note: This command is designed for a fresh setup or a comprehensive re-scan and reorganization.
 
 5) `appimg reset`
-- Description: Reset the managed AppImage state. Move managed AppImages to a temporary area, remove their folders, and undo registration.
+- Description: Resets the state of **managed** AppImages by moving them from `~/.appimages/managed/` to `~/.appimages/unmanaged/`, removing their associated `.desktop` files and symlinks, and deleting their now-empty managed application folders.
 - Usage: `appimg reset`
 - Behavior:
-	- Move all AppImage files from their folders in `~/.appimages` into `~/.appimages/tmp`.
-	- When moving, also move any icons that belong to an AppImage; rename them using the pattern `<appname>-icon.*` so they can be detected later by `appimg update`.
-	- After moving files to `~/.appimages/tmp`, delete the now-empty app folders.
-	- Mark the moved AppImage files as non-executable.
-	- Remove any symlinks created in the system applications directory.
-	- `appimg update` should be able to detect icons in `~/.appimages/tmp` (using the `<appname>-icon.*` pattern), rename them to `icon.*` and move them back to the appropriate folders when restoring.
-
-6) `appimg select`
-- Description: Manage and switch between multiple versions of an AppImage for a given application name.
-- Usage:
-	- `appimg select <appname>`: List available versions for `<appname>` and indicate the currently active one.
-	- `appimg select <appname> --switch <VERSION>`: Switch the active AppImage version for `<appname>` to `<VERSION>`. The `<VERSION>` is a unique identifier, a string, or a numeric index.
-- Behavior:
-	- **Version Naming Convention**: When `appimg move` processes AppImages, if multiple versions of the same application (basically when there's more than one appimage of the same name) are detected, it appends a unique `#version-string` suffix to the filename (e.g., `krita#1.AppImage`, `krita#2.AppImage`). The `#` character denotes the start of the version string for identification purposes across commands.
-	- **Storage Location**: All versions of a single application are stored within the same dedicated subfolder under `~/.appimages` (e.g., `~/.appimages/krita/krita#1.AppImage`).
-	- **Active Version Symlink**: A symlink, named after the application without a version suffix (e.g., `~/.appimages/krita/krita.AppImage`), points to the currently active version. This symlink is the target for `.desktop` file entries and system integration.
-	- **`appimg select <appname>`**: Lists all available versioned AppImages (e.g., `krita#1.AppImage`, `krita#3.AppImage`) found in the application's folder and indicates which version the active symlink currently points to.
-	- **`appimg select <appname> --switch <VERSION>`**: Modifies the active symlink (e.g., `~/.appimages/krita/krita.AppImage`) to point to the AppImage file corresponding to `<VERSION>`. Subsequently, `appimg update <appname>` is automatically run to re-generate the `.desktop` file and ensure system integration reflects the new active version.
-	- **Interactions with other commands**:
-		- `appimg move`: Recognizes the `#` character as a version separator and ensures multiple versions of an application are grouped within the same folder.
-		- `appimg reset`: Removes the active version symlink (e.g., `krita.AppImage`) when moving AppImages to `~/.appimages/tmp`. The version string (e.g., `#1`) is preserved in the AppImage filename during this move.
-
+	- Identifies all AppImages currently within `~/.appimages/managed/`.
+	- For each managed AppImage:
+		- Moves the AppImage file from its managed application folder (e.g., `~/.appimages/managed/org.kde.krita/org.kde.krita.AppImage`) to the `~/.appimages/unmanaged/` directory.
+		- Removes the application's `.desktop` file from its original managed folder (e.g., `~/.appimages/managed/org.kde.krita/org.kde.krita.desktop`).
+		- Deletes the symlink to the `.desktop` file from the system applications directory (e.g., `~/.local/share/applications/org.kde.krita.desktop`).
+		- Removes the now-empty application folder from `~/.appimages/managed/` (e.g., `~/.appimages/managed/org.kde.krita/`).
+	- After the process, all previously managed AppImages will reside in `~/.appimages/unmanaged/`, effectively unregistering them from the system and preparing them for a potential re-management or manual handling.
 
 Notes
 - Treat `.AppImage` and `.appimage` equivalently (case-insensitive matching).
-- Default managed directory: `~/.appimages`.
+- Default managed directory: `~/.appimages/managed`.
+- Default unmanaged directory: `~/.appimages/unmanaged`.
 - Placeholder icon path: `~/.appimages/placeholder-icon.png`.

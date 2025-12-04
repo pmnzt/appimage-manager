@@ -15,7 +15,7 @@
 - One-shot full setup with `appimg setup-all`
 - No external dependencies beyond standard GNU/Linux command-line tools
 
-[demo.webm](https://github.com/user-attachments/assets/c08ffad6-b408-4703-9e7e-0a9972a9e25f)
+[demo.webm](https://github.com/user-attachments/assets/83b701d4-d42c-4a87-9394-e87998a38d1f)
 
 ## Installation
 
@@ -80,11 +80,10 @@ Generates or updates `.desktop` launchers for AppImages in the managed directory
 
 - **Usage:**
   ```bash
-  appimg update [APPNAME] [--fast]
+  appimg update [APPNAME]
   ```
 - **Options:**
   - `[APPNAME]`: Update a specific app.
-  - `--fast`: Skip icon and `.desktop` file extraction.
 
 ### `appimg setup-all`
 
@@ -92,7 +91,7 @@ A convenience command that runs `appimg move --all` followed by `appimg update`.
 
 - **Usage:**
   ```bash
-  appimg setup-all [--fast]
+  appimg setup-all
   ```
 
 ### `appimg reset`
@@ -103,19 +102,6 @@ Resets the managed AppImage state by moving AppImages to a temporary directory a
   ```bash
   appimg reset
   ```
-
-### `appimg select`
-
-Manages and switches between multiple versions of an AppImage.
-
-- **Usage:**
-  ```bash
-  appimg select <appname>
-  appimg select <appname> --switch <VERSION>
-  ```
-- **Behavior:**
-  - `appimg select <appname>`: Lists available versions.
-  - `appimg select <appname> --switch <VERSION>`: Switches the active version.
 
 ## Example workflow
 
