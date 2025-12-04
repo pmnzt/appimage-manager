@@ -61,11 +61,9 @@ cmd_move() {
     local search="$HOME"
     local do_all=0
     local specific_file=""
-    local verbose=0
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --verbose) verbose=1; shift ;;
             -s) search="$2"; shift 2 ;;
             --all) do_all=1; shift ;;
             *) specific_file="$1"; shift ;;
@@ -77,16 +75,13 @@ cmd_move() {
     move_one_file() {
         local f="$1"
         if [[ "$f" == "$APPIMG_DIR"* && "$f" != "$APPIMG_DIR/tmp"* ]]; then
-            if [[ "$verbose" -eq 1 ]]; then
-                echo "Skipping (already managed): $f"
-            fi
+            echo "Skipping (already managed): $f"
             return
         fi
 
         local tmpdir
         tmpdir=$(mktemp -d)
         chmod +x "$f"
-        # Always extract .desktop files, even in non-verbose mode, to determine ID
         (cd "$tmpdir" && "$f" --appimage-extract '*.desktop') >/dev/null 2>&1 || true
 
         local desktop_file
@@ -94,16 +89,11 @@ cmd_move() {
         # Check if squashfs-root was created and contains the desktop file
         if [[ ! -d "$tmpdir/squashfs-root" ]]; then
             # If not, try a full extract as a fallback
-            if [[ "$verbose" -eq 1 ]]; then
-                echo "Warning: Targeted extraction failed in cmd_move, falling back to full extraction for $f." >&2
-            fi
             (cd "$tmpdir" && "$f" --appimage-extract) >/dev/null 2>&1 || true
         fi
         
         if [[ ! -d "$tmpdir/squashfs-root" ]]; then
-            if [[ "$verbose" -eq 1 ]]; then
-                echo "Warning: Failed to extract squashfs-root for $f. Skipping." >&2
-            fi
+            echo "Warning: Failed to extract squashfs-root for $f. Skipping."
             rm -rf "$tmpdir"
             return
         fi
@@ -119,9 +109,7 @@ cmd_move() {
         fi
 
         if [[ -z "$desktop_file" ]]; then
-            if [[ "$verbose" -eq 1 ]]; then
-                echo "Warning: No .desktop file found in $f. Skipping." >&2
-            fi
+            echo "Warning: No .desktop file found in $f. Skipping."
             rm -rf "$tmpdir"
             return
         fi
@@ -131,14 +119,10 @@ cmd_move() {
         local dest_dir="$APPIMG_DIR/$desktop_id"
         local dest_appimage="$dest_dir/$desktop_id.AppImage"
 
-        if [[ "$verbose" -eq 1 ]]; then
-            echo "Desktop ID: $desktop_id"
-        fi
+        echo "Desktop ID: $desktop_id"
         mkdir -p "$dest_dir"
 
-        if [[ "$verbose" -eq 1 ]]; then
-            echo "Moving $f → $dest_appimage"
-        fi
+        echo "Moving $f → $dest_appimage"
         mv "$f" "$dest_appimage" || die "Failed to move $f"
         
         rm -rf "$tmpdir"
@@ -170,12 +154,10 @@ cmd_move() {
 # ------------------------------------------------------------
 cmd_update() {
     local target_app_name=""
-    local verbose=0
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --verbose) verbose=1; shift ;;
             -*) die "Unknown option for update: $1" ;;
             *)
                 if [[ -n "$target_app_name" ]]; then
@@ -201,9 +183,6 @@ cmd_update() {
     else
         dirs_to_update=("$APPIMG_DIR"/*)
     fi
-
-    local managed_apps=(
-)
 
     for dir in "${dirs_to_update[@]}"; do
         [[ ! -d "$dir" ]] && continue
@@ -264,32 +243,23 @@ cmd_update() {
         
         # If the above fails to create squashfs-root or get files, perform a full extract as fallback
         if [[ "$extracted_successfully" == "false" ]]; then
-            if [[ "$verbose" -eq 1 ]]; then
-                echo "Warning: Targeted extraction failed, falling back to full extraction for $executable_appimage." >&2
-            fi
+            echo "Warning: Targeted extraction failed, falling back to full extraction for $executable_appimage." >&2
             (cd "$tmpdir" && "$executable_appimage" --appimage-extract >/dev/null 2>&1) || true
         fi
 
         if [[ ! -d "$tmpdir/squashfs-root" ]]; then
-            if [[ "$verbose" -eq 1 ]]; then
-                echo "Warning: Failed to extract squashfs-root for $executable_appimage. Skipping." >&2
-            fi
+            echo "Warning: Failed to extract squashfs-root for $executable_appimage. Skipping." >&2
             rm -rf "$tmpdir"
-            managed_apps+=("$name (Desktop: ✗, Icon: ✗)")
             continue # Move to next AppImage in the loop
         fi
 
         local icon_name=""
         local desktop_name=""
 
-        local desktop_found="✗"
-        local icon_copied="✗"
-
         if [[ -d "$tmpdir/squashfs-root" ]]; then
             # Try to pick the correct icon by reading the embedded .desktop file's Icon key
             desktop_inside=$(find "$tmpdir/squashfs-root" -type f -iname "*.desktop" | head -n 1)
             if [[ -n "$desktop_inside" ]]; then
-                desktop_found="✓"
                 icon_name=$(grep -Ei '^Icon=' "$desktop_inside" | head -n1 | sed -E 's/Icon=//I') || true
                 icon_name="${icon_name%%$'\r'}"
 
@@ -386,7 +356,6 @@ cmd_update() {
                     icon="$dir/icon.$ext"
                     # Create .noiconkeep marker file
                     touch "$dir/.noiconkeep"
-                    icon_copied="✓"
                 fi
             fi
             rm -rf "$tmpdir"
@@ -394,11 +363,7 @@ cmd_update() {
 
         if [[ -z "$icon" ]]; then
             icon=$(find "$dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
-            if [[ -n "$icon" ]]; then
-                icon_copied="✓"
-            fi
         fi
-
         if [[ -z "$icon" ]]; then
             icon="$APPIMG_DIR/placeholder-icon.png"
         fi
@@ -408,9 +373,7 @@ cmd_update() {
         local terminal_for_desktop_entry="${terminal_from_desktop:-false}"
         local categories_for_desktop_entry="${categories_from_desktop:-Utility;}"
 
-        if [[ "$verbose" -eq 1 ]]; then
-            echo "Generating $desktop_file"
-        fi
+        echo "Generating $desktop_file"
 
         cat > "$desktop_file" <<EOF
 [Desktop Entry]
@@ -426,17 +389,8 @@ EOF
 
         # Symlink into applications directory
         ln -sf "$desktop_file" "$DESKTOP_TARGET/$app_name_for_desktop.desktop"
-        if [[ "$verbose" -eq 1 ]]; then
-            echo "Linked → $DESKTOP_TARGET/$app_name_for_desktop.desktop"
-        fi
-        managed_apps+=("$name (Desktop: $desktop_found, Icon: $icon_copied)")
+        echo "Linked → $DESKTOP_TARGET/$app_name_for_desktop.desktop"
     done
-    if [[ "$verbose" -eq 0 ]]; then
-        echo "Managed AppImages:"
-        for app in "${managed_apps[@]}"; do
-            echo "  $app"
-        done
-    fi
 }
 
 
@@ -444,21 +398,8 @@ EOF
 # Command: appimg setup-all
 # ------------------------------------------------------------
 cmd_setup_all() {
-    local verbose=0
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --verbose) verbose=1; shift ;;
-            *) die "Unknown option for setup-all: $1" ;;
-        esac
-    done
-
-    if [[ "$verbose" -eq 1 ]]; then
-        cmd_move --all --verbose
-        cmd_update --verbose
-    else
-        cmd_move --all
-        cmd_update
-    fi
+    cmd_move --all
+    cmd_update
 }
 
 
