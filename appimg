@@ -70,11 +70,12 @@ cmd_move() {
         esac
     done
 
-    mkdir -p "$APPIMG_DIR"
+    mkdir -p "$APPIMG_DIR/managed"
+    mkdir -p "$APPIMG_DIR/unmanaged"
 
     move_one_file() {
         local f="$1"
-        if [[ "$f" == "$APPIMG_DIR"* && "$f" != "$APPIMG_DIR/tmp"* ]]; then
+        if [[ "$f" == "$APPIMG_DIR/managed"* ]]; then
             echo "Skipping (already managed): $f"
             return
         fi
@@ -116,7 +117,7 @@ cmd_move() {
 
         local desktop_id
         desktop_id=$(basename "$desktop_file" .desktop)
-        local dest_dir="$APPIMG_DIR/$desktop_id"
+        local dest_dir="$APPIMG_DIR/managed/$desktop_id"
         local dest_appimage="$dest_dir/$desktop_id.AppImage"
 
         echo "Desktop ID: $desktop_id"
@@ -173,15 +174,13 @@ cmd_update() {
 
     local dirs_to_update
     if [[ -n "$target_app_name" ]]; then
-        local target_dir="$APPIMG_DIR/$target_app_name"
-       
-        local target_dir="$APPIMG_DIR/$target_app_name"
+        local target_dir="$APPIMG_DIR/managed/$target_app_name"
         if [[ ! -d "$target_dir" ]]; then
             die "Application '$target_app_name' not found."
         fi
         dirs_to_update=("$target_dir")
     else
-        dirs_to_update=("$APPIMG_DIR"/*)
+        dirs_to_update=("$APPIMG_DIR/managed"/*)
     fi
 
     for dir in "${dirs_to_update[@]}"; do
@@ -421,60 +420,23 @@ cmd_reset() {
         fi
     done
 
-    mkdir -p "$APPIMG_DIR/tmp"
-
     # ---------------------------------------------
-    # 2. Move all AppImage files and their icons into tmp/
+    # 2. Move all AppImage files from managed/ to unmanaged/
     # ---------------------------------------------
-    find "$APPIMG_DIR" -mindepth 2 -type f -iname "*.AppImage" | while IFS= read -r f; do
+    echo "Moving managed AppImages to unmanaged..."
+    find "$APPIMG_DIR/managed" -type f -iname "*.AppImage" | while IFS= read -r f; do
         file_name=$(basename "$f")
-        app_dir=$(dirname "$f")
-        echo "Moving $f → $APPIMG_DIR/tmp/$file_name"
-        mv "$f" "$APPIMG_DIR/tmp/$file_name" || continue
-
-        # Check for .noiconkeep marker; if present, skip moving icon
-        if [[ ! -f "$app_dir/.noiconkeep" ]]; then
-            icon=$(find "$app_dir" -maxdepth 1 -type f -iname "icon.*" | head -n 1)
-            if [[ -n "$icon" && -f "$icon" ]]; then
-                icon_ext="${icon##*.}"
-                base_name="${file_name%.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]}"
-                app_name="${base_name%%#*}"
-                icon_name="${app_name}-icon.$icon_ext"
-                echo "Moving icon $icon → $APPIMG_DIR/tmp/$icon_name"
-                mv "$icon" "$APPIMG_DIR/tmp/$icon_name" || echo "Failed to move icon $icon"
-            fi
-        else
-            echo "Skipping icon move for $app_dir due to .noiconkeep"
-        fi
+        echo "Moving $f → $APPIMG_DIR/unmanaged/$file_name"
+        mv "$f" "$APPIMG_DIR/unmanaged/$file_name" || continue
     done
 
     # ---------------------------------------------
-    # 3. Delete all folders inside ~/.appimages
-    #    except: tmp/ and placeholder-icon.png
+    # 3. Delete all managed folders
     # ---------------------------------------------
-    for item in "$APPIMG_DIR"/*; do
-        base="$(basename "$item")"
-        [[ "$base" == "tmp" ]] && continue
-        [[ "$base" == "placeholder-icon.png" ]] && continue
-        if [[ -d "$item" ]]; then
-            echo "Deleting folder: $item"
-            rm -rf "$item"
-        fi
-    done
+    echo "Deleting managed AppImage directories..."
+    find "$APPIMG_DIR/managed" -mindepth 1 -type d -exec rm -rf {} + 2>/dev/null || true
 
-    # ---------------------------------------------
-    # 4. Remove executable bit from all AppImages in tmp
-    # ---------------------------------------------
-    echo "Removing executable permissions from AppImages in tmp/"
-    shopt -s nullglob
-    for f in "$APPIMG_DIR"/tmp/*.AppImage; do
-        chmod -x "$f"
-    done
-    shopt -u nullglob
-
-    echo "Reset complete! Run 'appimg setup-all' to rebuild."
 }
-
 
 # ------------------------------------------------------------
 # Command: appimg help
