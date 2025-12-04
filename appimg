@@ -34,7 +34,47 @@ find_appimages() {
 }
 
 appname_from_path() {
-    basename "$1" | sed -E 's/\.AppImage$//i'
+    basename "$1" | sed -E 's/(\.AppImage$|#active)//i'
+}
+
+# New helper function
+get_appimage_metadata() {
+    local f="$1"
+    local desktop_id=""
+    local has_active=0
+
+    if echo "$(basename "$f")" | grep -q '#active'; then
+        has_active=1
+    fi
+
+    local tmpdir
+    tmpdir=$(mktemp -d)
+
+    chmod +x "$f"
+    (cd "$tmpdir" && "$f" --appimage-extract '*.desktop') >/dev/null 2>&1 || true
+
+    if [[ ! -d "$tmpdir/squashfs-root" ]]; then
+        (cd "$tmpdir" && "$f" --appimage-extract) >/dev/null 2>&1 || true
+    fi
+
+    if [[ -d "$tmpdir/squashfs-root" ]]; then
+        local all_desktop_files
+        all_desktop_files=$(ls -1 "$tmpdir/squashfs-root" | grep ".desktop$")
+            
+        local desktop_file
+        desktop_file=$(echo "$all_desktop_files" | grep -v "url-handler.desktop" | head -n 1)
+
+        if [[ -z "$desktop_file" ]]; then
+            desktop_file=$(echo "$all_desktop_files" | head -n 1)
+        fi
+
+        if [[ -n "$desktop_file" ]]; then
+            desktop_id=$(basename "$desktop_file" .desktop)
+        fi
+    fi
+    rm -rf "$tmpdir"
+
+    echo "$desktop_id|$has_active"
 }
 
 
@@ -73,81 +113,147 @@ cmd_move() {
     mkdir -p "$APPIMG_DIR/managed"
     mkdir -p "$APPIMG_DIR/unmanaged"
 
-    move_one_file() {
-        local f="$1"
-        if [[ "$f" == "$APPIMG_DIR/managed"* ]]; then
-            echo "Skipping (already managed): $f"
-            return
-        fi
-
-        local tmpdir
-        tmpdir=$(mktemp -d)
-        chmod +x "$f"
-        (cd "$tmpdir" && "$f" --appimage-extract '*.desktop') >/dev/null 2>&1 || true
-
-        local desktop_file
-        
-        # Check if squashfs-root was created and contains the desktop file
-        if [[ ! -d "$tmpdir/squashfs-root" ]]; then
-            # If not, try a full extract as a fallback
-            (cd "$tmpdir" && "$f" --appimage-extract) >/dev/null 2>&1 || true
-        fi
-        
-        if [[ ! -d "$tmpdir/squashfs-root" ]]; then
-            echo "Warning: Failed to extract squashfs-root for $f. Skipping."
-            rm -rf "$tmpdir"
-            return
-        fi
-
-        local all_desktop_files
-        all_desktop_files=$(ls -1 "$tmpdir/squashfs-root" | grep ".desktop$")
-        
-        local desktop_file
-        desktop_file=$(echo "$all_desktop_files" | grep -v "url-handler.desktop" | head -n 1)
-
-        if [[ -z "$desktop_file" ]]; then
-            desktop_file=$(echo "$all_desktop_files" | head -n 1)
-        fi
-
-        if [[ -z "$desktop_file" ]]; then
-            echo "Warning: No .desktop file found in $f. Skipping."
-            rm -rf "$tmpdir"
-            return
-        fi
-
-        local desktop_id
-        desktop_id=$(basename "$desktop_file" .desktop)
-        local dest_dir="$APPIMG_DIR/managed/$desktop_id"
-        local dest_appimage="$dest_dir/$desktop_id.AppImage"
-
-        echo "Desktop ID: $desktop_id"
-        mkdir -p "$dest_dir"
-
-        echo "Moving $f → $dest_appimage"
-        mv "$f" "$dest_appimage" || die "Failed to move $f"
-        
-        rm -rf "$tmpdir"
-    }
+    declare -a all_appimages_info # To store path|desktop_id|has_active for all found AppImages
 
     if [[ "$do_all" -eq 1 ]]; then
         mapfile -t files < <(find_appimages "$search")
-        [[ ${#files[@]} -eq 0 ]] && die "No AppImages found."
-
+        if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No AppImages found in '$search'."
+            return
+        fi
         for f in "${files[@]}"; do
-            move_one_file "$f"
+            # Skip if already in managed directory structure
+            read -r desktop_id has_active <<< "$(get_appimage_metadata "$f")"
+            all_appimages_info+=("$f|$desktop_id|$has_active")
         done
-        return
+    elif [[ -n "$specific_file" ]]; then
+        if [[ ! -f "$specific_file" ]]; then
+            die "File not found: $specific_file"
+        fi
+        read -r desktop_id has_active <<< "$(get_appimage_metadata "$specific_file")"
+        all_appimages_info+=("$specific_file|$desktop_id|$has_active")
+    else
+        die "You must provide a file or use --all"
     fi
 
-    if [[ -z "$specific_file" ]]; then
-        die "You must provide a file unless using --all"
-    fi
+    # Group AppImages by desktop ID (or 'no_desktop_id' if none found)
+    declare -A grouped_appimages # key: desktop_id, value: newline-separated list of "path|has_active"
 
-    if [[ ! -f "$specific_file" ]]; then
-        die "File not found: $specific_file"
-    fi
+    for info_string in "${all_appimages_info[@]}"; do
+        IFS='|' read -r path desktop_id has_active <<< "$info_string"
+        echo "DEBUG: Before ID re-eval - Path: $path, Desktop ID: $desktop_id, Active: $has_active"
+        if [[ -z "$desktop_id" ]]; then
+            if [[ "$has_active" -eq 1 ]]; then
+                desktop_id=$(appname_from_path "$path")
+            else
+                desktop_id="no_desktop_id"
+            fi
+        fi
+        echo "DEBUG: After ID re-eval - Path: $path, Final Desktop ID: $desktop_id, Active: $has_active"
 
-    move_one_file "$specific_file"
+        if [[ -n "${grouped_appimages[$desktop_id]}" ]]; then
+            grouped_appimages[$desktop_id]+=$'\n'
+        fi
+        grouped_appimages[$desktop_id]+="$path|$has_active"
+    done
+
+    # Process grouped AppImages by desktop ID
+    for desktop_id in "${!grouped_appimages[@]}"; do
+        # Convert newline-separated string to array, preserving spaces in filenames
+        mapfile -t app_files_info < <(echo "${grouped_appimages[$desktop_id]}")
+        
+        local primary_app_path=""
+        local active_app_path=""
+        local first_valid_app_path=""
+
+        # Find the primary AppImage: prioritize #active, otherwise take the first valid one
+        for app_info in "${app_files_info[@]}"; do
+            echo "DEBUG:   Processing app_info: $app_info"
+            if [[ -z "$app_info" ]]; then continue; fi
+            IFS='|' read -r current_path current_has_active <<< "$app_info"
+            echo "DEBUG:     Current Path: $current_path, Current Active: $current_has_active"
+            if [[ "$current_has_active" -eq 1 ]]; then
+                active_app_path="$current_path"
+                echo "DEBUG:     Active App found: $active_app_path"
+            fi
+            if [[ -z "$first_valid_app_path" ]]; then
+                first_valid_app_path="$current_path"
+                echo "DEBUG:     First Valid App set to: $first_valid_app_path"
+            fi
+        done
+        
+        if [[ -n "$active_app_path" ]]; then
+            primary_app_path="$active_app_path"
+        else
+            primary_app_path="$first_valid_app_path"
+        fi
+        
+        echo "DEBUG: Final primary_app_path for $desktop_id: $primary_app_path"
+
+        # If still no primary app (e.g., no files or all were managed), skip
+        if [[ -z "$primary_app_path" ]]; then
+            continue
+        fi
+
+        local dest_dir="$APPIMG_DIR/managed/$desktop_id"
+        local dest_appimage="$dest_dir/$(basename "$primary_app_path")"
+        local existing_managed_appimage=""
+
+        # Check if an appimage for this desktop_id already exists in managed/
+        if [[ -d "$dest_dir" ]]; then
+            existing_managed_appimage=$(find "$dest_dir" -maxdepth 1 -type f -iname "*.AppImage" | head -n 1)
+        fi
+
+        # Move the primary AppImage
+        mkdir -p "$dest_dir"
+        if [[ -n "$existing_managed_appimage" && "$(readlink -f "$primary_app_path")" != "$(readlink -f "$existing_managed_appimage")" ]]; then
+            echo "Overwriting existing managed AppImage for $desktop_id with $primary_app_path"
+            mv -f "$primary_app_path" "$dest_appimage" || die "Failed to move $primary_app_path"
+        elif [[ -z "$existing_managed_appimage" ]]; then
+            echo "Moving $primary_app_path → $dest_appimage"
+            mv "$primary_app_path" "$dest_appimage" || die "Failed to move $primary_app_path"
+        elif [[ "$(readlink -f "$primary_app_path")" == "$(readlink -f "$existing_managed_appimage")" ]]; then
+            echo "Skipping move: $primary_app_path is already the managed version."
+        fi
+
+        # Move any other AppImages in this group (that are not the primary) to unmanaged
+        for app_info in "${app_files_info[@]}"; do
+            if [[ -z "$app_info" ]]; then continue; fi
+            IFS='|' read -r current_path current_has_active <<< "$app_info"
+            if [[ "$current_path" != "$primary_app_path" ]]; then
+                local unmanaged_name
+                unmanaged_name=$(basename "$current_path")
+                local unmanaged_dir="$APPIMG_DIR/unmanaged"
+
+                # Don't move if it's already in the target directory
+                if [[ "$(readlink -f "$current_path")" != "$(readlink -f "$unmanaged_dir/$unmanaged_name")" ]]; then
+                    echo "Moving $current_path → $unmanaged_dir/$unmanaged_name (duplicate/non-primary for $desktop_id)"
+                    mv "$current_path" "$unmanaged_dir/$unmanaged_name" || die "Failed to move $current_path to unmanaged."
+                fi
+            fi
+        done
+    done
+
+    # Move any AppImages that ended up in the 'no_desktop_id' group and were not chosen as primary (which shouldn't happen if #active logic is working)
+    # This loop specifically handles files that never had a desktop_id and were not selected as active.
+    if [[ -n "${grouped_appimages['no_desktop_id']}" ]]; then
+        IFS=$'\n' read -ra no_id_files_info <<< "${grouped_appimages['no_desktop_id']}"
+        for app_info in "${no_id_files_info[@]}"; do
+            if [[ -z "$app_info" ]]; then continue; fi
+            IFS='|' read -r current_path current_has_active <<< "$app_info"
+            
+            # Check if this file was already moved as a primary (which should not happen for 'no_desktop_id' if logic is robust)
+            # Or if it was already moved as a duplicate.
+            # This is a final catch-all.
+            if [[ ! -f "$current_path" ]]; then # If file doesn't exist, it has already been moved
+                continue
+            fi
+            
+            local unmanaged_name=$(basename "$current_path")
+            echo "Moving $current_path → $APPIMG_DIR/unmanaged/$unmanaged_name \(no desktop ID\)"
+            mv "$current_path" "$APPIMG_DIR/unmanaged/$unmanaged_name" || die "Failed to move $current_path to unmanaged."
+        done
+    fi
 }
 
 # ------------------------------------------------------------

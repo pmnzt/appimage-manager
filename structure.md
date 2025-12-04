@@ -70,8 +70,11 @@ This document describes the CLI commands and expected behavior for managing AppI
 		- Its embedded `.desktop` file is extracted to determine the application's ID.
 		- A folder named after the ID (e.g., `org.kde.krita`) is created inside `~/.appimages/managed/`.
 		- The AppImage is moved into this new folder and renamed to match the folder name (e.g., `~/.appimages/managed/org.kde.krita/org.kde.krita.AppImage`).
-	- This process overwrites any existing AppImage with the same ID in the `managed/` directory, ensuring only one version of each application is managed at a time.
-	- AppImages already residing within `~/.appimages/managed/` are skipped to prevent redundant operations.
+	- During a move operation, if multiple AppImages are found with the same application ID:
+		- If any filename includes `#active`, the first encountered AppImage with `#active` in its name will be moved to `managed/`, overwriting any existing AppImage with that ID.
+		- If no AppImage filenames include `#active`, the first encountered AppImage will be moved to `managed/`, overwriting any existing AppImage with that ID.
+		- Other AppImages with the same ID will remain in `unmanaged/`.
+	- AppImages already residing within `~/.appimages/managed/` are skipped, unless an AppImage with `#active` or a first-encountered non-active one is being moved that would overwrite it. This prevents redundant operations and ensures the prioritized version is managed.
 	- If `--all` is omitted, the user must provide a specific AppImage path: `appimg move ~/Downloads/myapp.AppImage`.
 	- File extension matching is case-insensitive (`.AppImage`, `.appimage`).
 
