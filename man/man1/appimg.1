@@ -2,54 +2,35 @@
 .SH NAME
 appimg - manage AppImages
 .SH SYNOPSIS
-appimg [COMMAND] [APPIMAGE]
+appimg [COMMAND] [OPTIONS] [ARGS]
 .SH DESCRIPTION
-A script to manage, organize, and register AppImage files under ~/.appimages.
+A script to manage, organize, and register AppImage files under
+.BR ~/.appimages .
 
-AppImages are categorized into:
+AppImages are organized into two major categories:
 .RS
 .TP
 .B managed/
-Contains AppImages that have been registered by appimg. Each app has its own folder named after its desktop-file ID, containing the AppImage, its .desktop file, and its icon.
+Contains AppImages that have been organized and registered by appimg.
+Each AppImage has its own subdirectory, named after its desktop-file ID.
 .TP
 .B unmanaged/
-Contains newly discovered or reset AppImages.
+Contains AppImages that are newly discovered, reset from managed/, or moved without an update.
 .RE
 
+Generated launchers are symlinked into:
+.PP
+    ~/.local/share/applications/
+
+You may provide a custom icon by placing an icon file (e.g. icon.png, icon.svg)
+in a managed application folder and running:
+.PP
+    appimg update [APPNAME]
+
+If no icon exists, placeholder-icon.png is used.
+
 .SH COMMANDS
-.TP
-\fBmove\fR
-Move AppImage files into the managed directory (~/.appimages/managed). Each AppImage is placed in its own folder based on its application ID.
-.RS
-.PP
-\fBUSAGE:\fR
-.B appimg move [OPTIONS] [PATH]
-.PP
-\fBOPTIONS:\fR
-.TP
-\fB-s DIR\fR
-Specify a directory to search for AppImages.
-.TP
-\fB--all\fR
-Move all AppImages found in the search scope (defaults to $HOME if PATH is omitted).
-.PP
-\fBBEHAVIOR:\fR
-Create ~/.appimages, managed/, and unmanaged/ if missing.
-.br
-Extract the embedded .desktop file from each AppImage to determine its application ID.
-.br
-Create ~/.appimages/managed/<APPID>/ and move the AppImage into it.
-.br
-Rename the AppImage to: <APPID>.AppImage.
-.br
-Overwrite any existing AppImage for the same ID (only one version is managed at a time).
-.br
-Skip AppImages already inside managed/ to avoid pointless moves.
-.br
-If --all is not used, PATH must be provided.
-.br
-File extension matching is case-insensitive (.AppImage / .appimage).
-.RE
+
 .TP
 \fBls\fR
 List AppImage files. By default searches the user’s home directory.
@@ -61,104 +42,168 @@ List AppImage files. By default searches the user’s home directory.
 \fBOPTIONS:\fR
 .TP
 \fB-s DIR\fR
-Specify the directory to search ("s" = search scope).
+Specify a directory to search.
 .PP
 \fBOUTPUT:\fR
-Prints full paths to all detected AppImages.
+Prints each AppImage with full path.
+.PP
+\fBNOTES:\fR
+File extension matching is case-insensitive (.AppImage, .appimage).
 .RE
+
+.TP
+\fBmove\fR
+Move AppImage files into ~/.appimages/managed/, placing each AppImage into
+its own directory derived from the embedded desktop file ID.
+.RS
+.PP
+\fBUSAGE:\fR
+.B appimg move [OPTIONS] [PATH]
+.PP
+\fBOPTIONS:\fR
+.TP
+\fB-s DIR\fR
+Directory to search for AppImages. Defaults to $HOME if --all is used without PATH.
+.TP
+\fB--all\fR
+Move all AppImages found in the search scope.
+.PP
+\fBBEHAVIOR:\fR
+Creates ~/.appimages, managed/, and unmanaged/ if missing.
+.br
+For each AppImage:
+.RS
+.IP • 2
+Extract the embedded .desktop file to determine the application ID.
+.IP •
+Create ~/.appimages/managed/<APPID>/.
+.IP •
+Move the AppImage there and rename it to <APPID>.AppImage.
+.RE
+.PP
+\fBMultiple versions and #active priority:\fR
+.RS
+.IP • 2
+If multiple AppImages share the same ID:
+.RS
+.IP 1. 4
+If any filename includes "#active", the *first encountered* "#active" AppImage is chosen.
+.IP 2.
+Otherwise, the *first encountered* AppImage is chosen.
+.RE
+.IP •
+The chosen AppImage overwrites the existing one in managed/.
+.IP •
+Other AppImages with the same ID remain in unmanaged/.
+.RE
+.PP
+AppImages already located inside ~/.appimages/managed/ are skipped unless a
+higher-priority (#active or first-encountered) AppImage is being moved that
+should overwrite it.
+.PP
+If --all is omitted, PATH must be provided:
+.br
+    appimg move ~/Downloads/myapp.AppImage
+.PP
+Matching of .AppImage/.appimage is case-insensitive.
+.RE
+
 .TP
 \fBupdate\fR
-Generate or update .desktop files, icons, and symlinks for managed AppImages. If APPNAME is provided, only that application is updated.
+Generate or update .desktop files, icons, symlinks, and permissions for managed AppImages.
+If APPNAME is provided, only that app is updated.
 .RS
 .PP
 \fBUSAGE:\fR
 .B appimg update [APPNAME]
 .PP
 \fBBEHAVIOR:\fR
-Scan ~/.appimages/managed/ for application folders.
-.br
-For each folder containing an AppImage:
+For each application directory in ~/.appimages/managed/ containing an AppImage:
 .RS
 .IP • 2
-Generate/update <APPID>.desktop inside the folder.
+Create or update the .desktop file (e.g., org.kde.krita.desktop).
 .IP •
-Determine the icon using the following precedence:
+Ensure the AppImage file is executable.
+.IP •
+Create/update a symlink in ~/.local/share/applications/.
+.RE
+.PP
+\fBIcon selection precedence:\fR
 .RS
-1. If icon.* exists in the folder, use it.
-.br
-2. Otherwise extract the AppImage and attempt to locate an icon based on the embedded .desktop Icon key:
+.IP 1. 4
+If an icon.* file already exists in the app folder, use it (custom icons are preserved).
+.IP 2.
+Otherwise extract the AppImage and inspect its embedded .desktop Icon key:
 .RS
-• Search usr/share/icons and usr/share/pixmaps for a matching SVG (case-insensitive).
-.br
-• If none, search for matching PNG and choose the largest PNG.
-.br
-• If none, search for matching XPM.
+.IP • 2
+Search usr/share/icons and usr/share/pixmaps inside the extracted AppImage for
+a matching SVG (case-insensitive).
+.IP •
+If none, search for a matching PNG; choose the largest.
+.IP •
+If none, search for a matching XPM.
+.IP •
+If no matching icon is found in common directories, search the entire extracted
+contents for the largest SVG, else largest PNG, else largest XPM.
 .RE
-If no icon matching the Icon key is found:
+.IP 3.
+If no icon is found, copy ~/.appimages/placeholder-icon.png.
+.RE
+.PP
+The chosen icon is copied into the app folder as icon.<ext>.
+.PP
+If the icon was extracted from the AppImage (not a user-provided file):
 .RS
-• Fall back to largest SVG in extracted contents.
-.br
-• Otherwise largest PNG.
-.br
-• Otherwise largest XPM.
+.IP • 2
+A .noiconkeep marker is created to allow overwriting during future updates.
 .RE
-3. If no icon is found at all, use ~/.appimages/placeholder-icon.png.
 .RE
-.IP •
-Copy the chosen icon into the folder as icon.<ext>.
-.IP •
-If the icon was extracted, create a .noiconkeep marker (not created for custom icons).
-.IP •
-Ensure the AppImage binary is executable.
-.IP •
-Create/update a symlink in ~/.local/share/applications/ pointing to the .desktop file.
-.RE
-Note: AppImage file extensions are matched case-insensitively.
-.RE
+
 .TP
 \fBsetup-all\fR
-Run appimg move --all and appimg update to fully scan, organize, and register all AppImages.
+Perform a complete setup: discover AppImages, move them into managed/, then update them.
 .RS
 .PP
 \fBUSAGE:\fR
 .B appimg setup-all
 .PP
 \fBBEHAVIOR:\fR
-Find all AppImages under $HOME and move them into managed/.
-.br
-Update all managed applications (icons, desktop files, symlinks).
-.br
-Clean up outdated .desktop files and broken symlinks.
-.br
-Remove empty folders from managed/.
+.IP • 2
+Runs: appimg move --all
+.IP •
+Runs: appimg update
+.IP •
+Cleans up outdated .desktop files and broken symlinks.
+.IP •
+Deletes empty directories in managed/.
 .RE
+
 .TP
 \fBreset\fR
-Reset all managed AppImages by moving them into ~/.appimages/unmanaged, removing registration files, and cleaning up managed/.
+Reset all managed AppImages by moving them to unmanaged/ and unregistering them.
 .RS
 .PP
 \fBUSAGE:\fR
 .B appimg reset
 .PP
 \fBBEHAVIOR:\fR
-Identify all managed AppImages.
-.br
-For each:
+For each application in ~/.appimages/managed/:
 .RS
 .IP • 2
-Move the AppImage into ~/.appimages/unmanaged/.
+Move its AppImage to ~/.appimages/unmanaged/.
 .IP •
-Remove its .desktop file from the managed/<APPID>/ directory.
+Remove its .desktop file from the managed folder.
 .IP •
-Delete its symlink from ~/.local/share/applications/.
+Remove its symlink from ~/.local/share/applications/.
 .IP •
-Delete the now-empty managed/<APPID>/ folder.
+Delete the now-empty managed/<APPID>/ directory.
 .RE
-After reset, all AppImages reside in unmanaged/, completely unregistered from the system.
+After the operation, all previously managed AppImages reside in unmanaged/.
 .RE
+
 .TP
 \fBversion\fR, \fB-v\fR
-Print the appimg version.
+Display the appimg version.
 .RS
 .PP
 \fBUSAGE:\fR
@@ -166,6 +211,19 @@ Print the appimg version.
 .br
 .B appimg -v
 .RE
+
+.SH NOTES
+.RS
+.IP • 2
+Treat .AppImage and .appimage equivalently.
+.IP •
+Managed directory: ~/.appimages/managed
+.IP •
+Unmanaged directory: ~/.appimages/unmanaged
+.IP •
+Placeholder icon: ~/.appimages/placeholder-icon.png
+.RE
+
 .SH AUTHOR
 .TP
 .B "pmnzt"
