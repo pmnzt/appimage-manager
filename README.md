@@ -15,7 +15,7 @@
 - One-shot full setup with `appimg setup-all`
 - No external dependencies beyond standard GNU/Linux command-line tools
 
-[demo.webm](https://github.com/user-attachments/assets/d8a07837-4dbf-4ebd-b31f-3921b140ec38)
+[demo.webm](https://github.com/user-attachments/assets/83b701d4-d42c-4a87-9394-e87998a38d1f)
 
 ## Installation
 
