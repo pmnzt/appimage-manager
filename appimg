@@ -217,7 +217,41 @@ cmd_update() {
 
         # Always attempt to extract icons since we need the embedded .desktop file info
         tmpdir=$(mktemp -d)
-        (cd "$tmpdir" && "$executable_appimage" --appimage-extract >/dev/null 2>&1) || true
+        
+        # Define glob patterns for targeted extraction
+        local glob_patterns=(
+            '*.desktop'
+            'usr/share/applications/*.desktop'
+            'share/applications/*.desktop'
+            'usr/share/icons/**/*'
+            'share/icons/**/*'
+            'usr/share/pixmaps/*'
+            'share/pixmaps/*'
+            '*.png'
+            '*.svg'
+            '**/*.ico'
+        )
+
+        # Perform targeted extraction for each glob pattern
+        local extracted_successfully=false
+        for pattern in "${glob_patterns[@]}"; do
+            (cd "$tmpdir" && "$executable_appimage" --appimage-extract "$pattern") || true
+            if [[ -d "$tmpdir/squashfs-root" ]]; then
+                extracted_successfully=true
+            fi
+        done
+        
+        # If the above fails to create squashfs-root or get files, perform a full extract as fallback
+        if [[ "$extracted_successfully" == "false" ]]; then
+            echo "Warning: Targeted extraction failed, falling back to full extraction for $executable_appimage." >&2
+            (cd "$tmpdir" && "$executable_appimage" --appimage-extract >/dev/null 2>&1) || true
+        fi
+
+        if [[ ! -d "$tmpdir/squashfs-root" ]]; then
+            echo "Warning: Failed to extract squashfs-root for $executable_appimage. Skipping." >&2
+            rm -rf "$tmpdir"
+            continue # Move to next AppImage in the loop
+        fi
 
         local icon_name=""
         local desktop_name=""
