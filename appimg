@@ -33,6 +33,11 @@ find_appimages() {
     find "$search_dir" -type f -iname "*.AppImage" -not -path "$APPIMG_DIR/managed/*" 2>/dev/null
 }
 
+find_all_appimages() {
+    local search_dir="$1"
+    find "$search_dir" -type f -iname "*.AppImage" 2>/dev/null
+}
+
 appname_from_path() {
     basename "$1" | sed -E 's/(\.AppImage$|#active)//i'
 }
@@ -90,9 +95,16 @@ cmd_ls() {
         esac
     done
 
-    find_appimages "$search"
-}
+    mapfile -t files < <(find_all_appimages "$search")
 
+    for f in "${files[@]}"; do
+        if [[ "$(readlink -f "$f")" == "$APPIMG_DIR/managed/"* ]]; then
+            echo "$f (managed)"
+        else
+            echo "$f"
+        fi
+    done
+}
 
 # ------------------------------------------------------------
 # Command: appimg move
