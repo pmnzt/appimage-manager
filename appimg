@@ -30,7 +30,7 @@ die() {
 
 find_appimages() {
     local search_dir="$1"
-    find "$search_dir" -type f -iname "*.AppImage" 2>/dev/null
+    find "$search_dir" -type f -iname "*.AppImage" -not -path "$APPIMG_DIR/managed/*" 2>/dev/null
 }
 
 appname_from_path() {
@@ -101,14 +101,76 @@ cmd_move() {
     local search="$HOME"
     local do_all=0
     local specific_file=""
-
+    local target_dir=""
+    local args=()
+    
+    # Capture all arguments after options
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -s) search="$2"; shift 2 ;;
             --all) do_all=1; shift ;;
-            *) specific_file="$1"; shift ;;
+            *) args+=("$1"); shift ;;
         esac
     done
+
+    # Determine file and target_dir from remaining arguments
+    if [[ "${#args[@]}" -eq 1 ]]; then
+        if [[ "$do_all" -eq 1 ]]; then
+            target_dir="${args[0]}"
+        else
+            specific_file="${args[0]}"
+        fi
+    elif [[ "${#args[@]}" -eq 2 ]]; then
+        if [[ "$do_all" -eq 1 ]]; then
+            die "move --all takes at most one directory argument."
+        fi
+        specific_file="${args[0]}"
+        target_dir="${args[1]}"
+    elif [[ "${#args[@]}" -gt 2 ]]; then
+        die "Too many arguments for move."
+    fi
+
+    # Path 1: A target directory is specified. Move files and exit.
+    if [[ -n "$target_dir" ]]; then
+        if [[ ! -d "$target_dir" ]]; then
+            echo "Creating directory: $target_dir"
+            mkdir -p "$target_dir" || die "Could not create directory $target_dir"
+        fi
+
+        if [[ "$do_all" -eq 1 ]]; then
+            mapfile -t files_to_move < <(find_appimages "$search")
+            if [[ ${#files_to_move[@]} -eq 0 ]]; then
+                echo "No unmanaged AppImages found in '$search' to move."
+                return
+            fi
+            for f in "${files_to_move[@]}"; do
+                echo "Moving $f → $target_dir/"
+                mv "$f" "$target_dir/" || die "Failed to move $f"
+            done
+        else # specific file
+            if [[ -z "$specific_file" ]]; then
+                die "You must provide a file to move."
+            fi
+            if [[ ! -f "$specific_file" ]]; then
+                die "File not found: $specific_file"
+            fi
+            # Check if it's in the managed directory
+            local full_path
+            full_path=$(readlink -f "$specific_file")
+            if [[ "$full_path" == "$APPIMG_DIR/managed/"* ]]; then
+                 echo "Skipping move: $specific_file is already managed."
+                 return
+            fi
+            echo "Moving $specific_file → $target_dir/"
+            mv "$specific_file" "$target_dir/" || die "Failed to move $specific_file"
+        fi
+        return # We are done.
+    fi
+
+    # Path 2: No target directory. Use the management logic.
+    if [[ "$do_all" -eq 0 && -z "$specific_file" ]]; then
+        die "You must provide a file or use --all"
+    fi
 
     mkdir -p "$APPIMG_DIR/managed"
     mkdir -p "$APPIMG_DIR/unmanaged"
@@ -122,7 +184,7 @@ cmd_move() {
             return
         fi
         for f in "${files[@]}"; do
-            # Skip if already in managed directory structure
+            # The check for managed files is now in find_appimages
             read -r desktop_id has_active <<< "$(get_appimage_metadata "$f")"
             all_appimages_info+=("$f|$desktop_id|$has_active")
         done
@@ -130,10 +192,15 @@ cmd_move() {
         if [[ ! -f "$specific_file" ]]; then
             die "File not found: $specific_file"
         fi
+        # Check if it's in the managed directory
+        local full_path
+        full_path=$(readlink -f "$specific_file")
+        if [[ "$full_path" == "$APPIMG_DIR/managed/"* ]]; then
+                echo "Skipping move: $specific_file is already managed."
+                return
+        fi
         read -r desktop_id has_active <<< "$(get_appimage_metadata "$specific_file")"
         all_appimages_info+=("$specific_file|$desktop_id|$has_active")
-    else
-        die "You must provide a file or use --all"
     fi
 
     # Group AppImages by desktop ID (or 'no_desktop_id' if none found)
