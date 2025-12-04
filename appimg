@@ -141,7 +141,6 @@ cmd_move() {
 
     for info_string in "${all_appimages_info[@]}"; do
         IFS='|' read -r path desktop_id has_active <<< "$info_string"
-        echo "DEBUG: Before ID re-eval - Path: $path, Desktop ID: $desktop_id, Active: $has_active"
         if [[ -z "$desktop_id" ]]; then
             if [[ "$has_active" -eq 1 ]]; then
                 desktop_id=$(appname_from_path "$path")
@@ -149,7 +148,6 @@ cmd_move() {
                 desktop_id="no_desktop_id"
             fi
         fi
-        echo "DEBUG: After ID re-eval - Path: $path, Final Desktop ID: $desktop_id, Active: $has_active"
 
         if [[ -n "${grouped_appimages[$desktop_id]}" ]]; then
             grouped_appimages[$desktop_id]+=$'\n'
@@ -168,17 +166,13 @@ cmd_move() {
 
         # Find the primary AppImage: prioritize #active, otherwise take the first valid one
         for app_info in "${app_files_info[@]}"; do
-            echo "DEBUG:   Processing app_info: $app_info"
             if [[ -z "$app_info" ]]; then continue; fi
             IFS='|' read -r current_path current_has_active <<< "$app_info"
-            echo "DEBUG:     Current Path: $current_path, Current Active: $current_has_active"
             if [[ "$current_has_active" -eq 1 ]]; then
                 active_app_path="$current_path"
-                echo "DEBUG:     Active App found: $active_app_path"
             fi
             if [[ -z "$first_valid_app_path" ]]; then
                 first_valid_app_path="$current_path"
-                echo "DEBUG:     First Valid App set to: $first_valid_app_path"
             fi
         done
         
@@ -188,7 +182,6 @@ cmd_move() {
             primary_app_path="$first_valid_app_path"
         fi
         
-        echo "DEBUG: Final primary_app_path for $desktop_id: $primary_app_path"
 
         # If still no primary app (e.g., no files or all were managed), skip
         if [[ -z "$primary_app_path" ]]; then
