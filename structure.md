@@ -59,24 +59,25 @@ This document describes the CLI commands and expected behavior for managing AppI
 - Notes: File extension matching is case-insensitive (`.AppImage`, `.appimage`).
 
 2) `appimg move`
-- Description: Move AppImage files into the `managed/` directory (`~/.appimages/managed`). Each AppImage will be placed in its own dedicated folder within `managed/`.
-- Usage: `appimg move [OPTIONS] [PATH]`
+- Description: Moves AppImage files from a source location to a destination. This command operates in two modes: "Direct Move" (moving files to a user-specified directory) or "Managed Import" (organizing files into the internal managed library structure based on metadata).
+- Usage: `appimg move [OPTIONS] [FILE] [TARGET_DIR]`
 - Options:
-	- `-s DIR` — specify a directory to search for AppImages. Defaults to the user's home directory if `--all` is used without `PATH`.
-	- `--all` — move all AppImages found in the search scope. If `PATH` is provided, it searches within `PATH`.
+    - `-s`: Sets the source directory to search for AppImages when using `--all` (default is `$HOME`).
+    - `--all`: Automatically finds and processes all AppImages found in the search path.
 - Behavior:
-	- If `~/.appimages`, `~/.appimages/managed`, or `~/.appimages/unmanaged` do not exist, they will be created.
-	- For each AppImage:
-		- Its embedded `.desktop` file is extracted to determine the application's ID.
-		- A folder named after the ID (e.g., `org.kde.krita`) is created inside `~/.appimages/managed/`.
-		- The AppImage is moved into this new folder and renamed to match the folder name (e.g., `~/.appimages/managed/org.kde.krita/org.kde.krita.AppImage`).
-	- During a move operation, if multiple AppImages are found with the same application ID:
-		- If any filename includes `#active`, the first encountered AppImage with `#active` in its name will be moved to `managed/`, overwriting any existing AppImage with that ID.
-		- If no AppImage filenames include `#active`, the first encountered AppImage will be moved to `managed/`, overwriting any existing AppImage with that ID.
-		- Other AppImages with the same ID will remain in `unmanaged/`.
-	- AppImages already residing within `~/.appimages/managed/` are skipped, unless an AppImage with `#active` or a first-encountered non-active one is being moved that would overwrite it. This prevents redundant operations and ensures the prioritized version is managed.
-	- If `--all` is omitted, the user must provide a specific AppImage path: `appimg move ~/Downloads/myapp.AppImage`.
-	- File extension matching is case-insensitive (`.AppImage`, `.appimage`).
+    - Path 1: A target directory is specified.
+        - Creates the target directory if it does not exist.
+        - If `--all` is used, finds all unmanaged AppImages in the search path and moves them into the target directory.
+        - If a specific file is provided, checks if the file is already in `managed/`. If not, moves the file to the target directory.
+    - Path 2: No target directory is specified (Managed Import).
+        - Gathers metadata (desktop ID and active status) for the specific file or all files found via `--all`.
+        - Groups the AppImages by their unique desktop ID.
+        - For each group (Application):
+            - Determines the "Primary" AppImage. Logic prioritizes files tagged as `#active`; if none are active, it defaults to the first valid file.
+            - Moves the Primary AppImage to `~/.appimages/managed/<desktop_id>/`.
+            - If a managed AppImage already exists for that ID, it is overwritten if the new file is different.
+            - Moves any secondary files (duplicates or non-active versions) to `~/.appimages/unmanaged/`.
+        - Files with no detectable desktop ID are moved directly to `~/.appimages/unmanaged/`.
 
 3) `appimg update`
 - Description: Scan `~/.appimages/managed/`, and for each application folder containing an AppImage, generate a `.desktop` file and ensure a proper icon and executable bit. If `APPNAME` is provided, only that specific application in `managed/` is updated.

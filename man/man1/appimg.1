@@ -20,12 +20,12 @@ Contains AppImages that are newly discovered, reset from managed/, or moved with
 
 Generated launchers are symlinked into:
 .PP
-    ~/.local/share/applications/
+    ~/.local/share/applications/
 
 You may provide a custom icon by placing an icon file (e.g. icon.png, icon.svg)
 in a managed application folder and running:
 .PP
-    appimg update [APPNAME]
+    appimg update [APPNAME]
 
 If no icon exists, placeholder-icon.png is used.
 
@@ -53,110 +53,101 @@ File extension matching is case-insensitive (.AppImage, .appimage).
 
 .TP
 \fBmove\fR
-Move AppImage files into ~/.appimages/managed/, placing each AppImage into
-its own directory derived from the embedded desktop file ID.
+Move AppImage files. This command has two distinct modes: **Managed Import** (default, sorting files into the library structure) and **Simple Move** (if a target directory is provided).
 .RS
 .PP
 \fBUSAGE:\fR
-.B appimg move [OPTIONS] [PATH]
+.B appimg move [OPTIONS] [FILE] [TARGET_DIR]
 .PP
 \fBOPTIONS:\fR
 .TP
 \fB-s DIR\fR
-Directory to search for AppImages. Defaults to $HOME if --all is used without PATH.
+Specify a directory to search when using \fB--all\fR (defaults to \fB$HOME\fR).
 .TP
 \fB--all\fR
-Move all AppImages found in the search scope.
+Process all AppImages found in the search scope.
 .PP
-\fBBEHAVIOR:\fR
-Creates ~/.appimages, managed/, and unmanaged/ if missing.
-.br
-For each AppImage:
+\fBBEHAVIOR MODES:\fR
+.RS
+.TP
+\fB1. Simple Move (Target Directory Provided)\fR
+If the last argument is a directory, the command performs a standard move operation.
 .RS
 .IP • 2
-Extract the embedded .desktop file to determine the application ID.
+The target directory is created if missing.
 .IP •
-Create ~/.appimages/managed/<APPID>/.
+If \fB--all\fR is used, all found AppImages are moved directly to \fBTARGET_DIR/\fR.
 .IP •
-Move the AppImage there and rename it to <APPID>.AppImage.
+If a specific file is provided, it is moved to \fBTARGET_DIR/\fR. Files already in the managed directory are skipped.
 .RE
-.PP
-\fBMultiple versions and #active priority:\fR
+.TP
+\fB2. Managed Import (Default Mode)\fR
+If no target directory is provided, AppImages are imported into the library structure.
+.br
+\fBRequires\fR a file argument or the \fB--all\fR flag.
 .RS
 .IP • 2
-If multiple AppImages share the same ID:
-.RS
-.IP 1. 4
-If any filename includes "#active", the *first encountered* "#active" AppImage is chosen.
-.IP 2.
-Otherwise, the *first encountered* AppImage is chosen.
-.RE
+Creates \fB~/.appimages/managed/\fR and \fB~/.appimages/unmanaged/\fR if missing.
 .IP •
-The chosen AppImage overwrites the existing one in managed/.
+Files are grouped by their embedded desktop file ID.
 .IP •
-Other AppImages with the same ID remain in unmanaged/.
+\fBPrimary Selection:\fR For each group, the primary file is chosen: \fB#active\fR tag is prioritized, otherwise the first encountered file is used.
+.IP •
+The Primary AppImage is moved to \fB~/.appimages/managed/<APPID>/\fR. Existing managed versions may be overwritten.
+.IP •
+All other duplicate AppImages (non-primary versions) are moved to \fB~/.appimages/unmanaged/\fR.
+.IP •
+AppImages with no detectable ID are also moved to \fB~/.appimages/unmanaged/\fR.
+.RE
 .RE
 .PP
-AppImages already located inside ~/.appimages/managed/ are skipped unless a
-higher-priority (#active or first-encountered) AppImage is being moved that
-should overwrite it.
-.PP
-If --all is omitted, PATH must be provided:
-.br
-    appimg move ~/Downloads/myapp.AppImage
-.PP
-Matching of .AppImage/.appimage is case-insensitive.
+Matching of \fB.AppImage\fR/\fB.appimage\fR is case-insensitive.
 .RE
 
 .TP
 \fBupdate\fR
 Generate or update .desktop files, icons, symlinks, and permissions for managed AppImages.
-If APPNAME is provided, only that app is updated.
+If \fBAPPNAME\fR is provided, only that specific application is updated.
 .RS
 .PP
 \fBUSAGE:\fR
 .B appimg update [APPNAME]
 .PP
 \fBBEHAVIOR:\fR
-For each application directory in ~/.appimages/managed/ containing an AppImage:
+For each application directory in \fB~/.appimages/managed/\fR containing an AppImage:
 .RS
 .IP • 2
-Create or update the .desktop file (e.g., org.kde.krita.desktop).
+Generate or update the .desktop file (e.g., org.kde.krita.desktop).
 .IP •
 Ensure the AppImage file is executable.
 .IP •
-Create/update a symlink in ~/.local/share/applications/.
+Create or update a symlink in \fB~/.local/share/applications/\fR.
 .RE
 .PP
-\fBIcon selection precedence:\fR
+\fBIcon Selection Precedence:\fR
 .RS
 .IP 1. 4
-If an icon.* file already exists in the app folder, use it (custom icons are preserved).
+\fBExisting File:\fR If an \fBicon.*\fR file (png/svg) already exists in the application folder, it is used.
 .IP 2.
-Otherwise extract the AppImage and inspect its embedded .desktop Icon key:
+\fBInternal Common Paths:\fR The AppImage is extracted to inspect the .desktop \fBIcon\fR key.
 .RS
 .IP • 2
-Search usr/share/icons and usr/share/pixmaps inside the extracted AppImage for
-a matching SVG (case-insensitive).
+Search \fBusr/share/icons\fR and \fBusr/share/pixmaps\fR inside the extracted AppImage for a matching SVG (case-insensitive).
 .IP •
-If none, search for a matching PNG; choose the largest.
+If none, search those paths for a matching PNG (largest file chosen).
 .IP •
-If none, search for a matching XPM.
-.IP •
-If no matching icon is found in common directories, search the entire extracted
-contents for the largest SVG, else largest PNG, else largest XPM.
+If none, search those paths for a matching XPM.
 .RE
 .IP 3.
-If no icon is found, copy ~/.appimages/placeholder-icon.png.
+\fBGlobal Fallback:\fR If no icon is found in common paths, search the \fBentire\fR extracted contents for the largest SVG, then largest PNG, then largest XPM.
+.IP 4.
+\fBPlaceholder:\fR If no icon is found, \fB~/.appimages/placeholder-icon.png\fR is copied and used.
 .RE
 .PP
-The chosen icon is copied into the app folder as icon.<ext>.
-.PP
-If the icon was extracted from the AppImage (not a user-provided file):
-.RS
-.IP • 2
-A .noiconkeep marker is created to allow overwriting during future updates.
-.RE
+\fBMarker File:\fR
+.br
+If the icon was extracted from the AppImage (not user-provided), a \fB.noiconkeep\fR file is created.
+This allows the icon to be safely overwritten during future updates or resets.
 .RE
 
 .TP
