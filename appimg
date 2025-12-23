@@ -4,15 +4,17 @@
 # appimg - AppImage manager tool
 # Commands:
 #   appimg ls
+#   appimg run
 #   appimg move [--all] [-s dir] [file.AppImage]
 #   appimg update
 #   appimg setup-all
 #   appimg reset
+#   appimg open
 #   appimg version
 #   appimg help
 # ============================================================
 
-VERSION="0.3.0"
+VERSION="0.4.0"
 APPIMG_DIR="$HOME/.appimages"
 DESKTOP_TARGET="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 
