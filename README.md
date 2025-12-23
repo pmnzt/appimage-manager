@@ -13,7 +13,7 @@
 - Detect and use bundled icons, or fall back to a placeholder
 - Generate `.desktop` launchers and symlink them to the user applications directory
 - One-shot full setup with `appimg setup-all`
-- No external dependencies beyond standard GNU/Linux command-line tools
+- No external dependencies beyond standard GNU/Linux command-line tools ([nixos](#nixos-specific-note))
 
 [demo.webm](https://github.com/user-attachments/assets/83b701d4-d42c-4a87-9394-e87998a38d1f)
 
@@ -34,6 +34,18 @@ cd appimage-manager
 ```
 
 This will install `appimg` from your local clone.
+
+## NixOS-specific note
+
+On NixOS, the filesystem layout is **non-FHS** (non-typical Linux hierarchy), so some AppImages require the `appimage-run` package to execute properly.  
+
+You can include it in your system configuration like this:
+
+environment.systemPackages = with pkgs; [
+  appimage-run
+];
+
+This ensures AppImages run correctly without extra manual steps.
 
 ## Man Pages
 
@@ -126,8 +138,7 @@ appimg setup-all
 ## Requirements
 
 - Bash
-- Standard GNU/Linux utilities (`find`, `mv`, `ln`, etc.)
-- No third-party dependencies are required
+- Standard GNU/Linux utilities (find, mv, ln, etc.) (see [nixos](#nixos-specific-note))
 
 ## License
 

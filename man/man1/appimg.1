@@ -193,6 +193,49 @@ After the operation, all previously managed AppImages reside in unmanaged/.
 .RE
 
 .TP
+\fBrun\fR
+Run an AppImage directly, handling execution permissions and NixOS compatibility.
+This command is also used in the .desktop files generated for managed AppImages.
+.RS
+.PP
+\fBUSAGE:\fR
+.B appimg run <PATH_TO_APPIMAGE>
+.PP
+\fBBEHAVIOR:\fR
+.IP • 2
+Validates that a path is provided and the file exists.
+.IP •
+Ensures the AppImage is executable (chmod +x).
+.IP •
+On NixOS:
+.RS
+.IP • 2
+Detects non-FHS environment.
+.IP •
+If appimage-run is available, launches the AppImage using it.
+.IP •
+If appimage-run is missing, opens a terminal explaining:
+.RS
+.IP • 2
+NixOS is non-FHS and requires appimage-run.
+.IP •
+Provides minimal install hint and exits.
+.RE
+.RE
+.IP •
+On non-NixOS systems, executes the AppImage directly.
+.RE
+.PP
+\fBNOTES:\fR
+.IP • 2
+This command does not move, register, or manage the AppImage.
+.IP •
+Intended for quick execution or testing of AppImages anywhere on the filesystem.
+.IP •
+Managed AppImages’ .desktop launchers call this command to run the application.
+.RE
+
+.TP
 \fBversion\fR, \fB-v\fR
 Display the appimg version.
 .RS

@@ -127,3 +127,29 @@ Notes
 - Default managed directory: `~/.appimages/managed`.
 - Default unmanaged directory: `~/.appimages/unmanaged`.
 - Placeholder icon path: `~/.appimages/placeholder-icon.png`.
+
+6) `appimg run`
+
+- Description:
+  Runs an AppImage directly, handling execution permissions and NixOS compatibility automatically.  
+  This command is also used in the `.desktop` files generated for managed AppImages to launch the application.
+
+- Usage:
+  appimg run <PATH_TO_APPIMAGE>
+
+- Behavior:
+  - Validates that an AppImage path is provided and that the file exists.
+  - Ensures the AppImage is executable (chmod +x).
+  - On NixOS:
+      - Detects the non-FHS environment.
+      - If appimage-run is available, uses it to launch the AppImage.
+      - If appimage-run is missing, opens a terminal explaining that:
+          - NixOS is non-FHS.
+          - appimage-run is required to run AppImages.
+          - Provides a minimal install hint and exits.
+  - On non-NixOS systems:
+      - Executes the AppImage directly.
+
+- Notes:
+  - This command does not move, register, or manage the AppImage.
+  - Managed AppImages’ `.desktop` launchers call this command to run the application.
