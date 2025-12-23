@@ -14,7 +14,7 @@
 #   appimg help
 # ============================================================
 
-VERSION="0.4.0"
+VERSION="0.4.1"
 APPIMG_DIR="$HOME/.appimages"
 DESKTOP_TARGET="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 
@@ -26,7 +26,21 @@ mkdir -p "$DESKTOP_TARGET"
 # Helpers
 # ------------------------------------------------------------
 die() {
-    echo "Error: $1" >&2
+    local msg="$*"
+
+    # Terminal: print to stderr
+    if [[ -t 2 ]]; then
+        printf 'Error: %s\n' "$msg" >&2
+
+    # GUI session: show dialog / notification
+    elif [[ -n "$DISPLAY$WAYLAND_DISPLAY" ]]; then
+        if command -v zenity >/dev/null 2>&1; then
+            zenity --error --title="appimg" --text="$msg"
+        elif command -v notify-send >/dev/null 2>&1; then
+            notify-send "appimg error" "$msg"
+        fi
+    fi
+
     exit 1
 }
 
@@ -114,35 +128,24 @@ cmd_ls() {
 cmd_run() {
     local appimage_path="$1"
 
-    if [[ -z "$appimage_path" ]]; then
-        die "No AppImage path provided for run command."
-    fi
+    [[ -z "$appimage_path" ]] && die "No AppImage path provided."
+    [[ ! -f "$appimage_path" ]] && die "AppImage not found: $appimage_path"
 
-    if [[ ! -f "$appimage_path" ]]; then
-        die "AppImage file not found: $appimage_path"
-    fi
+    # Ensure executable (ignore failure on read-only FS)
+    [[ -x "$appimage_path" ]] || chmod +x "$appimage_path" 2>/dev/null || true
 
-    chmod +x "$appimage_path"
-
-    # NixOS detection
-    if [[ -d /nix/store ]]; then
-        if [[ -x /run/current-system/sw/bin/appimage-run ]]; then
-            /run/current-system/sw/bin/appimage-run "$appimage_path"
+    # NixOS detection (non-FHS)
+    if [[ -f /etc/NIXOS ]]; then
+        if command -v appimage-run >/dev/null 2>&1; then
+            exec appimage-run "$appimage_path" "${@:2}"
         else
-            x-terminal-emulator -e bash -c '
-            echo "NixOS detected. Install appimage-run:"
-            echo "  environment.systemPackages = with pkgs; [ appimage-run ];"
-            echo "NixOS is non-FHS, thus appimage-run is needed to run AppImages."
-            echo
-            echo "Press Enter to close..."
-            read
-            '
-            exit 1
+            die "NixOS detected (non-FHS). Install: appimage-run"
         fi
     else
-        "$appimage_path"
+        exec "$appimage_path" "${@:2}"
     fi
 }
+
 # ------------------------------------------------------------
 # Command: appimg move
 # ------------------------------------------------------------
