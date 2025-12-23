@@ -10,12 +10,11 @@
 1. [Features](#features)
 2. [Installation](#installation)
 3. [Commands](#commands)
-4. [Example workflow](#example-workflow)
-5. [Requirements](#requirements)
-6. [NixOS-specific note](#nixos-specific-note)
-7. [Documentation](#documentation)
-8. [License](#license)
-9. [Contributing](#contributing)
+4. [Requirements](#requirements)
+5. [NixOS-specific note](#nixos-specific-note)
+6. [Documentation](#documentation)
+7. [License](#license)
+8. [Contributing](#contributing)
 
 ---
 
