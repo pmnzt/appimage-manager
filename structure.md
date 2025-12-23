@@ -150,6 +150,16 @@ Notes
   - On non-NixOS systems:
       - Executes the AppImage directly.
 
+7) `appimg open`
+- Description: Interactively select and launch a managed AppImage.
+- Usage: `appimg open`
+- Behavior:
+	- Shows interactive terminal menu; use arrow keys.
+	- Press Enter to launch the selected AppImage.
+- Notes:
+	- Useful for quickly launching apps from the managed library.
+	- Does not move, update, or manage AppImages.
+
 - Notes:
   - This command does not move, register, or manage the AppImage.
   - Managed AppImages’ `.desktop` launchers call this command to run the application.

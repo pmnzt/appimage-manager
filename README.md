@@ -115,6 +115,25 @@ Resets the managed AppImage state by moving AppImages to a temporary directory a
   appimg reset
   ```
 
+### `appimg open`
+
+Interactively select and launch an AppImage from the managed directory (`~/.appimages/managed`).
+
+- **Usage:**
+```bash
+appimg open
+```
+- **Behavior:**
+  - Shows a terminal menu; navigate with arrow keys.
+  - Press Enter to launch the selected AppImage.
+
+- **Example:**
+```bash
+appimg open
+# Use arrow keys to select an app
+# Press Enter to launch
+```
+
 ## Example workflow
 
 ```bash
