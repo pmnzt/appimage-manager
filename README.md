@@ -23,11 +23,11 @@
 
 ## Features
 - Scan directories for .AppImage files
-- Organize AppImages into ~/.appimages/<AppName>/
+- Organize AppImages into ~/.appimages/
 - Detect and use bundled icons, or fall back to a placeholder
 - Generate .desktop launchers and symlink them to the user applications directory
 - One-shot full setup with appimg setup-all
-- No external dependencies beyond standard GNU/Linux command-line tools (nixos-specific note)
+- No external dependencies beyond standard GNU/Linux command-line tools (see [nixos](#nixos-specific-note))
 
 [demo.webm](https://github.com/user-attachments/assets/83b701d4-d42c-4a87-9394-e87998a38d1f)
 
@@ -197,7 +197,7 @@ appimg setup-all
 ## Requirements
 
 * Bash
-* Standard GNU/Linux utilities (find, mv, ln, etc.) (see nixos-specific note)
+* Standard GNU/Linux utilities (find, mv, ln, etc.) (see [nixos](#nixos-specific-note))
 
 ## Documentation
 
@@ -207,8 +207,6 @@ For detailed information on appimg commands, options, and usage, consult the man
 man appimg
 
 ```
-
----
 
 ## License
 
