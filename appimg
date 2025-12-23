@@ -591,7 +591,7 @@ cmd_update() {
 [Desktop Entry]
 Type=Application
 Name=$app_name_for_desktop_entry
-Exec="appimg run \"$appimage\""
+Exec="$(readlink -f "$0")" run "$appimage"
 Icon=$icon
 Terminal=$terminal_for_desktop_entry
 Categories=$categories_for_desktop_entry
