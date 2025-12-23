@@ -6,8 +6,6 @@
 
 `appimg` is a lightweight command-line utility for managing AppImage files on Linux. It scans for AppImage files, organizes them into a consistent directory layout, and automatically generates .desktop launchers.
 
----
-
 ## Table of Contents
 1. [Features](#features)
 2. [Installation](#installation)
@@ -19,6 +17,7 @@
 8. [License](#license)
 9. [Contributing](#contributing)
 
+---
 
 ## Features
 - Scan directories for .AppImage files
