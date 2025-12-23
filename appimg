@@ -107,6 +107,41 @@ cmd_ls() {
 }
 
 # ------------------------------------------------------------
+# Command: appimg run
+# ------------------------------------------------------------
+cmd_run() {
+    local appimage_path="$1"
+
+    if [[ -z "$appimage_path" ]]; then
+        die "No AppImage path provided for run command."
+    fi
+
+    if [[ ! -f "$appimage_path" ]]; then
+        die "AppImage file not found: $appimage_path"
+    fi
+
+    chmod +x "$appimage_path"
+
+    # NixOS detection
+    if [[ -d /nix/store ]]; then
+        if [[ -x /run/current-system/sw/bin/appimage-run ]]; then
+            /run/current-system/sw/bin/appimage-run "$appimage_path"
+        else
+            x-terminal-emulator -e bash -c '
+            echo "NixOS detected. Install appimage-run:"
+            echo "  environment.systemPackages = with pkgs; [ appimage-run ];"
+            echo "NixOS is non-FHS, thus appimage-run is needed to run AppImages."
+            echo
+            echo "Press Enter to close..."
+            read
+            '
+            exit 1
+        fi
+    else
+        "$appimage_path"
+    fi
+}
+# ------------------------------------------------------------
 # Command: appimg move
 # ------------------------------------------------------------
 cmd_move() {
@@ -556,7 +591,7 @@ cmd_update() {
 [Desktop Entry]
 Type=Application
 Name=$app_name_for_desktop_entry
-Exec="$appimage"
+Exec="appimg run \"$appimage\""
 Icon=$icon
 Terminal=$terminal_for_desktop_entry
 Categories=$categories_for_desktop_entry
@@ -647,6 +682,7 @@ cmd_version() {
 main() {
     case "$1" in
         ls)        shift; cmd_ls "$@" ;;
+        run)       shift; cmd_run "$@" ;;
         move)      shift; cmd_move "$@" ;;
         update)    shift; cmd_update "$@" ;;
         setup-all) shift; cmd_setup_all "$@" ;;
