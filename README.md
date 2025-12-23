@@ -19,7 +19,6 @@
 8. [License](#license)
 9. [Contributing](#contributing)
 
----
 
 ## Features
 - Scan directories for .AppImage files
@@ -31,7 +30,6 @@
 
 [demo.webm](https://github.com/user-attachments/assets/83b701d4-d42c-4a87-9394-e87998a38d1f)
 
----
 
 ## Installation
 
@@ -54,24 +52,6 @@ cd appimage-manager
 
 This will install appimg from your local clone.
 
----
-
-## NixOS-specific note
-
-On NixOS, the filesystem layout is non-FHS (non-typical Linux hierarchy), so some AppImages require the appimage-run package to execute properly.
-
-You can include it in your system configuration like this:
-
-```nix
-environment.systemPackages = with pkgs; [
-  appimage-run
-];
-
-```
-
-This ensures AppImages run correctly without extra manual steps.
-
----
 
 ## Commands
 
@@ -168,36 +148,27 @@ appimg open
 * Press Enter to launch the selected AppImage.
 
 
-
----
-
-## Example workflow
-
-```bash
-# 1. List AppImages in Downloads
-appimg ls -s ~/Downloads
-
-# 2. Move detected AppImages into the managed directory
-appimg move --all
-
-# 3. Generate launchers
-appimg update
-
-# Or run the full setup
-appimg setup-all
-
-# Reset and re-register
-appimg reset
-appimg setup-all
-
-```
-
----
-
 ## Requirements
 
 * Bash
 * Standard GNU/Linux utilities (find, mv, ln, etc.) (see [nixos](#nixos-specific-note))
+
+
+## NixOS-specific note
+
+On NixOS, the filesystem layout is non-FHS (non-typical Linux hierarchy), so some AppImages require the appimage-run package to execute properly.
+
+You can include it in your system configuration like this:
+
+```nix
+environment.systemPackages = with pkgs; [
+  appimage-run
+];
+
+```
+
+This ensures AppImages run correctly without extra manual steps.
+
 
 ## Documentation
 
