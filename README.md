@@ -33,7 +33,7 @@
 
 ### Via curl (Recommended for quick install)
 ```bash
-curl -sSL [https://raw.githubusercontent.com/pmnzt/appimage-manager/main/install/curl.sh](https://raw.githubusercontent.com/pmnzt/appimage-manager/main/install/curl.sh) | bash
+curl -sSL https://raw.githubusercontent.com/pmnzt/appimage-manager/main/install/curl.sh | bash
 
 ```
 
@@ -42,7 +42,7 @@ This command downloads the curl.sh script and pipes it directly to bash for exec
 ### Via git
 
 ```bash
-git clone [https://github.com/pmnzt/appimage-manager.git](https://github.com/pmnzt/appimage-manager.git)
+git clone https://github.com/pmnzt/appimage-manager.git
 cd appimage-manager
 ./install/install.sh
 
