@@ -4,15 +4,17 @@
 # appimg - AppImage manager tool
 # Commands:
 #   appimg ls
+#   appimg run
 #   appimg move [--all] [-s dir] [file.AppImage]
 #   appimg update
 #   appimg setup-all
 #   appimg reset
+#   appimg open
 #   appimg version
 #   appimg help
 # ============================================================
 
-VERSION="0.3.0"
+VERSION="0.4.0"
 APPIMG_DIR="$HOME/.appimages"
 DESKTOP_TARGET="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 
@@ -106,6 +108,41 @@ cmd_ls() {
     done
 }
 
+# ------------------------------------------------------------
+# Command: appimg run
+# ------------------------------------------------------------
+cmd_run() {
+    local appimage_path="$1"
+
+    if [[ -z "$appimage_path" ]]; then
+        die "No AppImage path provided for run command."
+    fi
+
+    if [[ ! -f "$appimage_path" ]]; then
+        die "AppImage file not found: $appimage_path"
+    fi
+
+    chmod +x "$appimage_path"
+
+    # NixOS detection
+    if [[ -d /nix/store ]]; then
+        if [[ -x /run/current-system/sw/bin/appimage-run ]]; then
+            /run/current-system/sw/bin/appimage-run "$appimage_path"
+        else
+            x-terminal-emulator -e bash -c '
+            echo "NixOS detected. Install appimage-run:"
+            echo "  environment.systemPackages = with pkgs; [ appimage-run ];"
+            echo "NixOS is non-FHS, thus appimage-run is needed to run AppImages."
+            echo
+            echo "Press Enter to close..."
+            read
+            '
+            exit 1
+        fi
+    else
+        "$appimage_path"
+    fi
+}
 # ------------------------------------------------------------
 # Command: appimg move
 # ------------------------------------------------------------
@@ -556,7 +593,7 @@ cmd_update() {
 [Desktop Entry]
 Type=Application
 Name=$app_name_for_desktop_entry
-Exec="$appimage"
+Exec="$(readlink -f "$0")" run "$appimage"
 Icon=$icon
 Terminal=$terminal_for_desktop_entry
 Categories=$categories_for_desktop_entry
@@ -617,6 +654,68 @@ cmd_reset() {
 }
 
 # ------------------------------------------------------------
+# Command: appimg open
+# ------------------------------------------------------------
+cmd_open() {
+    # Get list of subdirectories containing .desktop files
+    options=()
+    while IFS= read -r -d $'\0' dir; do
+        options+=("$(basename "$dir")")
+    done < <(find "$APPIMG_DIR/managed" -mindepth 1 -maxdepth 1 -type d -exec sh -c 'ls "$1"/*.desktop 2>/dev/null | grep -q .' _ {} \; -print0)
+
+    # Exit if no apps found
+    [[ ${#options[@]} -eq 0 ]] && { echo "No AppImages with .desktop files found in $APPIMG_DIR/managed"; exit 1; }
+
+    index=0
+
+    draw_menu() {
+        clear
+        echo "Select AppImage to open:"
+        for i in "${!options[@]}"; do
+            if [ "$i" -eq "$index" ]; then
+                echo -e "> \033[1;32m${options[$i]}\033[0m"
+            else
+                echo "  ${options[$i]}"
+            fi
+        done
+    }
+
+    while true; do
+        draw_menu
+        read -rsn1 key
+        if [[ $key == $'\x1b' ]]; then
+            read -rsn2 -t 0.1 key
+            if [[ $key == "[A" ]]; then
+                ((index--))
+                ((index<0)) && index=$((${#options[@]}-1))
+            elif [[ $key == "[B" ]]; then
+                ((index++))
+                ((index>=${#options[@]})) && index=0
+            fi
+        elif [[ $key == "" ]]; then
+            selected_dir="$APPIMG_DIR/managed/${options[$index]}"
+            desktop_file=$(find "$selected_dir" -maxdepth 1 -name '*.desktop' | head -n1)
+
+            if [[ -f "$desktop_file" ]]; then
+                echo "Launching $(basename "$desktop_file")..."
+                # Extract and run the command in Exec= (handles spaces)
+                # Get the command line from the .desktop file
+                cmd=$(grep -E '^Exec=' "$desktop_file" | head -n1 | cut -d'=' -f2-)
+
+                # Remove any placeholders like %U, %f, etc.
+                cmd=${cmd//%[fFuUdDnN]/}
+
+                # Run it safely
+                bash -c "$cmd"                
+            else
+                echo "No .desktop file found in $selected_dir!"
+            fi
+            break
+        fi
+    done
+}
+
+# ------------------------------------------------------------
 # Command: appimg help
 # ------------------------------------------------------------
 cmd_help() {
@@ -627,6 +726,7 @@ cmd_help() {
     echo "  appimg update [APPNAME]"
     echo "  appimg setup-all"
     echo "  appimg reset"
+    echo "  appimg open"
     echo "  appimg version"
     echo "  appimg -v"
     echo "  appimg help"
@@ -647,10 +747,12 @@ cmd_version() {
 main() {
     case "$1" in
         ls)        shift; cmd_ls "$@" ;;
+        run)       shift; cmd_run "$@" ;;
         move)      shift; cmd_move "$@" ;;
         update)    shift; cmd_update "$@" ;;
         setup-all) shift; cmd_setup_all "$@" ;;
         reset)     shift; cmd_reset ;;
+        open)     shift; cmd_open ;;
         version|-v) shift; cmd_version "$@" ;;
         help)      shift; cmd_help ;;
         version)   shift; cmd_version ;;
