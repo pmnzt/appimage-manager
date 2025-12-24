@@ -89,6 +89,9 @@ init_dmenu() {
     if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
         echo "--------------------------------------------------------"
         echo "NOTICE: $BIN_DIR is NOT in your \$PATH."
+        echo "to make sure dmenu can find the AppImages"
+        echo "Add this to your .bashrc or .zshrc:"
+        echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
         echo "--------------------------------------------------------"
     fi
 }
