@@ -46,6 +46,26 @@ appimg update [APPNAME]
 
 If no icon is available, the `placeholder-icon.png` file will be used.
 
+
+### CLI & Launcher Integration (dmenu support)
+
+To make managed AppImages accessible via the terminal and keyboard-driven launchers (like `dmenu` or `rofi`), `appimg` creates simplified symlinks in the user's local binary directory:
+
+
+```
+
+~/.local/bin/
+krita        -> ~/.appimages/managed/org.kde.krita/org.kde.krita.AppImage
+blender      -> ~/.appimages/managed/org.blender.Blender/org.blender.Blender.AppImage
+
+```
+
+**Behavior:**
+- **Naming**: Links are automatically converted to lowercase and stripped of version numbers/extensions for easy typing.
+- **Path Awareness**: The tool ensures these links are available to any launcher that scans your `$PATH`.
+
+```
+
 # Commands
 
 This document describes the CLI commands and expected behavior for managing AppImage files.
@@ -98,6 +118,10 @@ This document describes the CLI commands and expected behavior for managing AppI
 		- Ensures the main AppImage file within the managed folder is executable.
 		- Creates a symlink for the generated `.desktop` file in the system applications directory (e.g., `~/.local/share/applications/org.kde.krita.desktop`).
 	- Note: AppImage file extensions are treated case-insensitively.
+    - **Binary Symlinking**: For every AppImage processed, a symlink is created in `~/.local/bin`.
+    - The link name is the lowercase base name of the application (e.g., `Krita-x86_64.AppImage` becomes `krita`).
+    - If `~/.local/bin` is not in the user's `$PATH`, a notice is printed to the terminal.
+
 
 4) `appimg setup-all`
 - Description: Convenience command that orchestrates a complete setup by running `appimg move --all` to discover and manage AppImages, followed by `appimg update` to register and configure them. It also performs a cleanup of outdated desktop files and empty managed directories.
@@ -121,6 +145,9 @@ This document describes the CLI commands and expected behavior for managing AppI
 		- Deletes the symlink to the `.desktop` file from the system applications directory (e.g., `~/.local/share/applications/org.kde.krita.desktop`).
 		- Removes the now-empty application folder from `~/.appimages/managed/` (e.g., `~/.appimages/managed/org.kde.krita/`).
 	- After the process, all previously managed AppImages will reside in `~/.appimages/unmanaged/`, effectively unregistering them from the system and preparing them for a potential re-management or manual handling.
+    - **Binary Cleanup**: Scans `~/.local/bin` and removes any symlinks that point to the `~/.appimages/managed/` directory.
+    - **Dangling Link Removal**: Specifically identifies and deletes "broken" symbolic links in `~/.local/bin` to keep the user's path clean.
+
 
 Notes
 - Treat `.AppImage` and `.appimage` equivalently (case-insensitive matching).

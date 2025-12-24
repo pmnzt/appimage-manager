@@ -23,6 +23,7 @@
 - Organize AppImages into ~/.appimages/
 - Detect and use bundled icons, or fall back to a placeholder
 - Generate .desktop launchers and symlink them to the user applications directory
+* Dmenu Support, Automatically symlinks AppImages to `~/.local/bin` for quick access via other launchers like `dmenu`
 - One-shot full setup with appimg setup-all
 - No external dependencies beyond standard GNU/Linux command-line tools (see [nixos](#nixos-specific-note))
 
