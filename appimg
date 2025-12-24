@@ -44,6 +44,55 @@ die() {
     exit 1
 }
 
+
+init_dmenu() {
+    local MANAGED_DIR="${APPIMG_DIR:-$HOME/.appimages}/managed"
+    local BIN_DIR="$HOME/.local/bin"
+
+    # 1. HANDLE RESET OPTION (Cleaning "Ghost" Links)
+    if [[ "$1" == "-r" || "$1" == "--reset" ]]; then
+        echo "Cleaning up symlinks in $BIN_DIR..."
+        
+        if [ -d "$BIN_DIR" ]; then
+            # Phase A: Remove BROKEN links (files that no longer exist)
+            # -xtype l finds symbolic links that are "dangling"
+            find "$BIN_DIR" -maxdepth 1 -xtype l -delete
+            echo "✓ cleaned all."
+
+            # Phase B: Remove links that DO exist but point to our managed folder
+            local ABS_MANAGED_DIR=$(readlink -f "$MANAGED_DIR" | sed 's:/*$::')
+            for link in "$BIN_DIR"/*; do
+                if [ -L "$link" ]; then
+                    local TARGET=$(readlink -f "$link")
+                    if [[ "$TARGET" == "$ABS_MANAGED_DIR"/* ]]; then
+                        echo "✓ Removing managed link: $(basename "$link")"
+                        rm "$link"
+                    fi
+                fi
+            done
+        fi
+        return 0
+    fi
+
+    # 2. STANDARD PRE-FLIGHT
+    if ! command -v dmenu >/dev/null 2>&1; then return 1; fi
+    mkdir -p "$BIN_DIR"
+
+    # 3. SYNC LOGIC
+    echo "Linking binaries to $BIN_DIR..."
+    find "$MANAGED_DIR" -maxdepth 2 -name "*.AppImage" | while read -r app; do
+        app_name=$(basename "$app" .AppImage | tr '[:upper:]' '[:lower:]')
+        ln -sf "$app" "$BIN_DIR/$app_name"
+    done
+
+    # 4. PATH CHECK
+    if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+        echo "--------------------------------------------------------"
+        echo "NOTICE: $BIN_DIR is NOT in your \$PATH."
+        echo "--------------------------------------------------------"
+    fi
+}
+
 find_appimages() {
     local search_dir="$1"
     find "$search_dir" -type f -iname "*.AppImage" -not -path "$APPIMG_DIR/managed/*" 2>/dev/null
@@ -607,6 +656,8 @@ EOF
         # Symlink into applications directory
         ln -sf "$desktop_file" "$DESKTOP_TARGET/$app_name_for_desktop.desktop"
         echo "Linked → $DESKTOP_TARGET/$app_name_for_desktop.desktop"
+
+        init_dmenu
     done
 }
 
@@ -654,6 +705,7 @@ cmd_reset() {
     echo "Deleting managed AppImage directories..."
     find "$APPIMG_DIR/managed" -mindepth 1 -type d -exec rm -rf {} + 2>/dev/null || true
 
+    init_dmenu --reset
 }
 
 # ------------------------------------------------------------
