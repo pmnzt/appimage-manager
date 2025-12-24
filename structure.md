@@ -47,10 +47,9 @@ appimg update [APPNAME]
 If no icon is available, the `placeholder-icon.png` file will be used.
 
 
-### CLI & Launcher Integration (dmenu support)
+### (dmenu support)
 
 To make managed AppImages accessible via the terminal and keyboard-driven launchers (like `dmenu` or `rofi`), `appimg` creates simplified symlinks in the user's local binary directory:
-
 
 ```
 
@@ -64,7 +63,6 @@ blender      -> ~/.appimages/managed/org.blender.Blender/org.blender.Blender.App
 - **Naming**: Links are automatically converted to lowercase and stripped of version numbers/extensions for easy typing.
 - **Path Awareness**: The tool ensures these links are available to any launcher that scans your `$PATH`.
 
-```
 
 # Commands
 
